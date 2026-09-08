@@ -36,12 +36,13 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
     align: "left", x: A.x, y: numeralY, maxWidth: numeralMaxWidth, lines: 1,
   };
 
-  // clipart: fit into a 0.60S x 0.38S box, right-aligned to safe edge, bottom at 0.82S
+  // clipart: fit into a 0.60S x 0.38S box, bottom at 0.82S. Its left edge sits at 0.37S so it overlaps
+  // the right of the numeral box (which ends at A.x + 0.42S), but never runs past the safe right edge.
   const boxW = 0.60 * S, boxH = 0.38 * S;
   const scale = Math.min(boxW / ctx.clipart.w, boxH / ctx.clipart.h);
   const cw = ctx.clipart.w * scale, ch = ctx.clipart.h * scale;
   const clipart: ImageLayer = { id: "clipart", type: "image", src: set.style.clipartSrc,
-    x: A.x + A.w - cw, y: 0.82 * S - ch, w: cw, h: ch };
+    x: Math.min(0.37 * S, A.x + A.w - cw), y: 0.82 * S - ch, w: cw, h: ch };
 
   const top = fitted("top", lines.top, A.x, A.y, A.w, 0.13 * S, "center");
 
