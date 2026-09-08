@@ -7,6 +7,7 @@ import { SetInputSchema, SetStyleSchema, type SetInput, type SetStyle } from "@/
 import { createNodeMeasurer, loadImageFromFile } from "@/engine/server";
 import { getProvider, generateClipart, describeClipart, chooseStyle } from "@/ai";
 import { db, schema } from "@/db";
+import { clipartPatch } from "@/db/clipart";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { putBlob } from "@/lib/blob";
 import { clipartSize, exportSetZip } from "@/lib/sets";
@@ -78,12 +79,14 @@ export async function saveSet(id: string, patch: { input?: SetInput; style?: Set
   });
 }
 
-/** Stores a new clipart on the set (and on the style, when one already exists). */
-async function saveClipart(id: string, loaded: LoadedSet, url: string) {
-  await write(id, {
-    input: { ...loaded.input, clipartSrc: url },
-    ...(loaded.style ? { style: { ...loaded.style, clipartSrc: url } } : {}),
-  });
+/**
+ * Stores a new clipart on the set and, when one exists, on its style.
+ *
+ * Only the `clipartSrc` key is written — see `clipartPatch`. A clipart action can spend ten seconds
+ * in image generation, and the edit the shop made while it ran must survive it.
+ */
+async function saveClipart(id: string, url: string) {
+  await write(id, clipartPatch(url));
 }
 
 export async function generateClipartAction(id: string): Promise<ActionResult<{ url: string; width: number; height: number }>> {
@@ -96,7 +99,7 @@ export async function generateClipartAction(id: string): Promise<ActionResult<{ 
       fail("Gagal membuat clipart, coba lagi.", e);
     }
     try {
-      await saveClipart(id, loaded, result.url);
+      await saveClipart(id, result.url);
     } catch (e) {
       fail("Gagal menyimpan clipart.", e);
     }
@@ -109,7 +112,7 @@ export async function uploadClipartAction(
   form: FormData,
 ): Promise<ActionResult<{ url: string; width: number; height: number }>> {
   return action(async () => {
-    const loaded = await loadSet(id);
+    await loadSet(id); // 404s early and keeps the same error vocabulary
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) fail("Pilih file gambar dulu.");
     if (file.size > MAX_UPLOAD_BYTES) fail(MAX_UPLOAD_MESSAGE);
@@ -121,7 +124,7 @@ export async function uploadClipartAction(
       fail("Gagal memproses gambar, coba file lain.", e);
     }
     try {
-      await saveClipart(id, loaded, url);
+      await saveClipart(id, url);
     } catch (e) {
       fail("Gagal menyimpan clipart.", e);
     }
