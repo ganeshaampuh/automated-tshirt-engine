@@ -5,6 +5,7 @@ import type Konva from "konva";
 import type { Design, Layer as DLayer, TextLayer, ImageLayer } from "../../types";
 import { displayText } from "../../text";
 import { imageGeometry, imageTopLeft, textGeometry, textTopLeft } from "./geometry";
+import { nearestWeight } from "../../fonts";
 
 /** Fields a drag or resize can write back. `TextLayer & ImageLayer` collapses to `never` on `type`,
  *  so the two layer shapes are merged without their discriminant. */
@@ -23,16 +24,6 @@ export type DesignStageProps = {
   /** Fired once every image layer has loaded and the stage has drawn them. */
   onReady?: () => void;
 };
-
-/**
- * The weight the *print* renderer actually draws with. `@napi-rs/canvas` does not select an instance
- * of our variable fonts: `400`, `700` and `900` all measure and draw the file's default face
- * (verified by measuring the same string at each weight through `createNodeMeasurer`). Chrome does
- * apply the `wght` axis, so honouring `layer.weight` here would make the on-screen design bolder
- * than the shirt that gets printed. Until the server can select an instance, the browser draws the
- * same default face — the preview's job is to match the print, not to out-render it.
- */
-const PRINTED_WEIGHT = 400;
 
 let measureCtx: CanvasRenderingContext2D | null = null;
 const offsetCache = new Map<string, number>();
@@ -70,7 +61,7 @@ function topBaselineOffset(font: string, weight: number, size: number): number {
 }
 
 function geometry(l: DLayer) {
-  return l.type === "image" ? imageGeometry(l) : textGeometry(l, topBaselineOffset(l.font, PRINTED_WEIGHT, l.size));
+  return l.type === "image" ? imageGeometry(l) : textGeometry(l, topBaselineOffset(l.font, nearestWeight(l.font, l.weight), l.size));
 }
 
 function useHtmlImage(src: string, onLoad?: (src: string) => void) {
@@ -122,11 +113,15 @@ function ImageNode({ l, editable, onChange, onSelect, nodeRef, onLoad }: NodePro
 
 function TextNode({ l, editable, onChange, onSelect, nodeRef }: NodeProps<TextLayer>) {
   const g = geometry(l);
+  // Konva builds its font string as `fontStyle fontVariant fontSize fontFamily`, so a numeric
+  // weight travels in `fontStyle`. Resolve it to a shipped face first: the family may not have the
+  // requested weight, and the measurers resolve it the same way.
+  const weight = nearestWeight(l.font, l.weight);
   return (
     <KText
       ref={nodeRef} id={l.id} text={displayText(l)} x={g.x} y={g.y} width={l.maxWidth} align={l.align}
       offsetX={g.offsetX} offsetY={g.offsetY}
-      fontFamily={l.font} fontStyle={String(PRINTED_WEIGHT)} fontSize={l.size} letterSpacing={l.letterSpacing ?? 0}
+      fontFamily={l.font} fontStyle={String(weight)} fontSize={l.size} letterSpacing={l.letterSpacing ?? 0}
       fill={l.color} stroke={l.stroke?.color} strokeWidth={l.stroke ? l.stroke.width * 2 : 0}
       fillAfterStrokeEnabled lineJoin="round"
       shadowColor={l.shadow?.color} shadowBlur={l.shadow?.blur ?? 0}

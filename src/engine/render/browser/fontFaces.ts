@@ -1,14 +1,17 @@
 import { CURATED_FONTS, FONT_REGISTRY, fontUrl } from "../../fonts";
 
+/** One `@font-face` per shipped face, at its exact weight — the browser must not synthesise bold. */
 export function fontFaceCss(): string {
-  return CURATED_FONTS.map(f => {
-    const w = FONT_REGISTRY[f].weights;
-    const range = w.length > 1 ? `${Math.min(...w)} ${Math.max(...w)}` : String(w[0]);
-    return `@font-face { font-family: "${f}"; src: url("${fontUrl(f)}") format("truetype"); font-weight: ${range}; font-display: block; }`;
-  }).join("\n");
+  return CURATED_FONTS.flatMap(f =>
+    FONT_REGISTRY[f].faces.map(
+      face => `@font-face { font-family: "${f}"; src: url("${fontUrl(f, face.weight)}") format("truetype"); font-weight: ${face.weight}; font-display: block; }`,
+    ),
+  ).join("\n");
 }
 
 export async function loadEngineFonts(): Promise<void> {
   if (typeof document === "undefined") return;
-  await Promise.all(CURATED_FONTS.flatMap(f => FONT_REGISTRY[f].weights.map(w => document.fonts.load(`${w} 32px "${f}"`))));
+  await Promise.all(
+    CURATED_FONTS.flatMap(f => FONT_REGISTRY[f].faces.map(face => document.fonts.load(`${face.weight} 32px "${f}"`))),
+  );
 }

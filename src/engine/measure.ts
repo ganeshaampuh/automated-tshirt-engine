@@ -1,5 +1,6 @@
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import { registerFonts } from "./fonts.node";
+import { nearestWeight } from "./fonts";
 import type { TextMeasurer } from "./textFit";
 
 let fontsRegistered = false;
@@ -23,7 +24,8 @@ export function createNodeMeasurer(): TextMeasurer {
   const ctx = createCanvas(10, 10).getContext("2d");
   return {
     width(text, font, weight, size, letterSpacing = 0) {
-      ctx.font = `${weight} ${size}px "${font}"`;
+      // Resolve to a weight the family ships so skia measures the face it will also draw.
+      ctx.font = `${nearestWeight(font, weight)} ${size}px "${font}"`;
       const base = ctx.measureText(text).width;
       return base + Math.max(0, text.length - 1) * letterSpacing;
     },

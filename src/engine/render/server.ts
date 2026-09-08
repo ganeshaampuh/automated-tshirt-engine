@@ -2,6 +2,7 @@ import { createCanvas, loadImage, type Image, type SKRSContext2D } from "@napi-r
 import { readFile } from "node:fs/promises";
 import type { Design, TextLayer, ImageLayer } from "../types";
 import { ensureNodeFonts } from "../measure";
+import { nearestWeight } from "../fonts";
 import { displayText } from "../text";
 
 export type ImageLike = Image;
@@ -45,7 +46,7 @@ async function drawImage(ctx: SKRSContext2D, l: ImageLayer, load: RenderOpts["lo
 
 function drawText(ctx: SKRSContext2D, l: TextLayer) {
   const text = displayText(l);
-  ctx.font = `${l.weight} ${l.size}px "${l.font}"`;
+  ctx.font = `${nearestWeight(l.font, l.weight)} ${l.size}px "${l.font}"`;
   ctx.textBaseline = "top";
   ctx.textAlign = l.align;
   (ctx as unknown as { letterSpacing?: string }).letterSpacing = `${l.letterSpacing ?? 0}px`;

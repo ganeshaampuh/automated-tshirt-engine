@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { TextMeasurer } from "../../textFit";
+import { nearestWeight } from "../../fonts";
 import { loadEngineFonts } from "./fontFaces";
 
 export function createBrowserMeasurer(): TextMeasurer {
@@ -8,7 +9,8 @@ export function createBrowserMeasurer(): TextMeasurer {
   const ctx = canvas.getContext("2d")!;
   return {
     width(text, font, weight, size, letterSpacing = 0) {
-      ctx.font = `${weight} ${size}px "${font}"`;
+      // Same resolution as the node measurer, so both sides agree on which face is being measured.
+      ctx.font = `${nearestWeight(font, weight)} ${size}px "${font}"`;
       return ctx.measureText(text).width + Math.max(0, text.length - 1) * letterSpacing;
     },
   };
