@@ -11,7 +11,8 @@ import { clipartPatch } from "@/db/clipart";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { putBlob } from "@/lib/blob";
 import { clipartSize, exportSetZip } from "@/lib/sets";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE, processClipartUpload } from "@/lib/upload";
+import { processClipartUpload } from "@/lib/clipartUpload";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE } from "@/lib/upload";
 
 const { sets } = schema;
 

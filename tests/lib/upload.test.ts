@@ -29,7 +29,7 @@ describe("clipart upload limits", () => {
 describe("processClipartUpload", () => {
   it("downscales an oversized upload to the clipart cap and keeps its aspect ratio", async () => {
     const sharp = (await import("sharp")).default;
-    const { processClipartUpload } = await import("@/lib/upload");
+    const { processClipartUpload } = await import("@/lib/clipartUpload");
     const big = await sharp({
       create: { width: 8000, height: 6000, channels: 4, background: { r: 200, g: 30, b: 90, alpha: 1 } },
     })
@@ -44,7 +44,7 @@ describe("processClipartUpload", () => {
 
   it("leaves a small clipart at its own size", async () => {
     const sharp = (await import("sharp")).default;
-    const { processClipartUpload } = await import("@/lib/upload");
+    const { processClipartUpload } = await import("@/lib/clipartUpload");
     const small = await sharp({
       create: { width: 300, height: 200, channels: 4, background: { r: 10, g: 10, b: 10, alpha: 1 } },
     })
