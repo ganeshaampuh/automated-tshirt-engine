@@ -2,7 +2,7 @@
   "id": "adult-flat",
   "sizeClass": "adult",
   "image": "adult-flat.png",
-  "pxPerCm": 24.000000000000004,
+  "pxPerCm": 24,
   "width": 2400,
   "height": 2600,
   "chestAnchor": {

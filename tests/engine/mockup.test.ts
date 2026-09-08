@@ -4,6 +4,8 @@ import { renderMockup, loadShirtAsset, defaultShirtFor } from "@/engine/mockup";
 import { loadImageFromFile } from "@/engine/render/server";
 import { collage } from "@/engine/templates/collage";
 import { createNodeMeasurer } from "@/engine/measure";
+import { canvasFor, maxCm } from "@/engine/sizing";
+import type { Design } from "@/engine/types";
 import { unicornSet, CLIPART_SIZE } from "../fixtures/set-unicorn";
 import { expectGolden } from "./golden";
 
@@ -36,6 +38,35 @@ describe("mockup", () => {
     // sample a pixel in the lower body of the shirt, below the design
     const x = 200, y = 360, i = (y * 400 + x) * 3;
     expect(data[i]).toBeLessThan(40);
+    // ...and the ground outside the silhouette must stay the flatten background, not the shirt colour
+    const o = (5 * 400 + 5) * 3;
+    expect(data[o]).toBeGreaterThan(230);
+    expect(data[o + 1]).toBeGreaterThan(230);
+    expect(data[o + 2]).toBeGreaterThan(230);
+  }, 30_000);
+
+  it("scales the design to real-world centimetres", async () => {
+    // a design that is one solid black layer filling the canvas: its printed width is exactly maxCm
+    const swatch = await sharp({ create: { width: 8, height: 8, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }).png().toBuffer();
+    const canvas = canvasFor("adult");
+    const design: Design = {
+      version: 2, sizeClass: "adult", canvas, shirtColor: "#ffffff",
+      layers: [{ id: "block", type: "image", src: `data:image/png;base64,${swatch.toString("base64")}`, x: 0, y: 0, w: canvas.w, h: canvas.h }],
+    };
+    const shirt = await loadShirtAsset("adult-flat");
+    const outW = 600;
+    const jpg = await renderMockup(design, shirt, { loadImage: loadImageFromFile, width: outW });
+    const { data, info } = await sharp(jpg).raw().toBuffer({ resolveWithObject: true });
+
+    const k = outW / shirt.width;
+    const designPx = maxCm("adult") * shirt.pxPerCm;          // design width in shirt pixels
+    const row = Math.round((shirt.chestAnchor.y + designPx / 2) * k); // mid-height of the block
+    let dark = 0;
+    for (let x = 0; x < info.width; x++) if (data[(row * info.width + x) * info.channels] < 128) dark++;
+
+    const expected = Math.round(designPx * k);
+    expect(expected).toBe(174);                                // 29 cm x 24 px/cm scaled to a 600 px frame
+    expect(Math.abs(dark - expected)).toBeLessThanOrEqual(2);
   }, 30_000);
 
   it("matches goldens for adult and kids", async () => {

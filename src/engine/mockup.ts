@@ -1,19 +1,35 @@
 import sharp from "sharp";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { Design, SizeClass } from "./types";
+import { z } from "zod";
+import { SizeClassSchema, type Design, type SizeClass } from "./types";
 import { maxCm } from "./sizing";
 import { renderDesign, type RenderOpts } from "./render/server";
 
-export type ShirtAsset = {
-  id: string; sizeClass: SizeClass; image: string; pxPerCm: number;
-  chestAnchor: { x: number; y: number }; width: number; height: number;
-};
+export const ShirtAssetSchema = z.object({
+  id: z.string().min(1),
+  sizeClass: SizeClassSchema,
+  image: z.string().min(1),
+  pxPerCm: z.number().positive(),
+  chestAnchor: z.object({ x: z.number(), y: z.number() }),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
+export type ShirtAsset = z.infer<typeof ShirtAssetSchema>;
 
 const MOCKUP_DIR = path.join(process.cwd(), "public", "mockups");
 
 export async function loadShirtAsset(id: string): Promise<ShirtAsset> {
-  return JSON.parse(await readFile(path.join(MOCKUP_DIR, `${id}.json`), "utf8"));
+  const file = path.join(MOCKUP_DIR, `${id}.json`);
+  let raw: string;
+  try {
+    raw = await readFile(file, "utf8");
+  } catch {
+    throw new Error(`shirt asset "${id}" not found at ${file}`);
+  }
+  const parsed = ShirtAssetSchema.safeParse(JSON.parse(raw));
+  if (!parsed.success) throw new Error(`shirt asset "${id}" is invalid: ${parsed.error.message}`);
+  return parsed.data;
 }
 
 export function defaultShirtFor(sizeClass: SizeClass): string {
@@ -27,11 +43,15 @@ function hexToRgb(hex: string) {
 
 export async function renderMockup(design: Design, shirt: ShirtAsset, opts: { loadImage: RenderOpts["loadImage"]; width?: number }): Promise<Buffer> {
   const outW = opts.width ?? 2000;
-  const base = sharp(path.join(MOCKUP_DIR, shirt.image)).ensureAlpha();
+  const base = await sharp(path.join(MOCKUP_DIR, shirt.image)).ensureAlpha().png().toBuffer();
 
-  // 1. tint white base with shirt color (multiply keeps shading/outline)
+  // 1. tint white base with shirt color (multiply keeps shading/outline), then mask the result back to
+  //    the shirt's own alpha — multiply over transparent pixels would otherwise flood the whole frame.
   const tint = await sharp({ create: { width: shirt.width, height: shirt.height, channels: 4, background: { ...hexToRgb(design.shirtColor), alpha: 1 } } }).png().toBuffer();
-  const shirtPng = await base.composite([{ input: tint, blend: "multiply" }]).png().toBuffer();
+  const shirtPng = await sharp(base)
+    .composite([{ input: tint, blend: "multiply" }, { input: base, blend: "dest-in" }])
+    .png()
+    .toBuffer();
 
   // 2. render design at real-world scale
   const scale = (shirt.pxPerCm * maxCm(design.sizeClass)) / design.canvas.w;
