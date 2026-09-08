@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   },
   // Native binaries must not be bundled.
   serverExternalPackages: ["@napi-rs/canvas", "sharp"],
+  experimental: {
+    // Clipart uploads are Server Action posts; the 1 MB default rejects any phone photo with a 413
+    // before the action can run. Keep this above `MAX_UPLOAD_BYTES` in `src/lib/upload.ts`.
+    serverActions: { bodySizeLimit: "10mb" },
+  },
 };
 
 export default nextConfig;

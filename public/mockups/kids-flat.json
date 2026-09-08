@@ -1,6 +1,6 @@
 {
   "id": "kids-flat",
-  "sizeClass": "kids-1-9",
+  "sizeClasses": ["kids-0-1", "kids-1-9"],
   "image": "kids-flat.png",
   "pxPerCm": 37.333333,
   "width": 2400,

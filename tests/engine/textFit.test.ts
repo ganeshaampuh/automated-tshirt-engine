@@ -29,6 +29,8 @@ describe("fitText", () => {
   it("node measurer measures real fonts", () => {
     const m = createNodeMeasurer();
     const w = m.width("Keisya", "Fredoka", 700, 100);
+    // the bold face, not the regular one — see fontWeight.test.ts
+    expect(w).not.toBeCloseTo(m.width("Keisya", "Fredoka", 400, 100), 1);
     expect(w).toBeGreaterThan(200);
     expect(w).toBeLessThan(500);
     expect(m.width("Keisya", "Fredoka", 700, 200)).toBeCloseTo(w * 2, 0);

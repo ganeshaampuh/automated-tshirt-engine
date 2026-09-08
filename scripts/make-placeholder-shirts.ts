@@ -5,7 +5,7 @@ import type { SizeClass } from "../src/engine/types";
 
 const OUT_DIR = path.join(__dirname, "..", "public", "mockups");
 
-async function make(id: string, sizeClass: SizeClass, W: number, H: number, pxPerCm: number) {
+async function make(id: string, sizeClasses: SizeClass[], W: number, H: number, pxPerCm: number) {
   // simple t-shirt silhouette: body rect + sleeves, light grey outline on white, transparent outside
   const bodyW = Math.round(W * 0.56), bodyX = Math.round((W - bodyW) / 2), bodyY = Math.round(H * 0.18);
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
@@ -16,13 +16,13 @@ async function make(id: string, sizeClass: SizeClass, W: number, H: number, pxPe
   mkdirSync(OUT_DIR, { recursive: true });
   await sharp(Buffer.from(svg)).png().toFile(path.join(OUT_DIR, `${id}.png`));
   writeFileSync(path.join(OUT_DIR, `${id}.json`), JSON.stringify({
-    id, sizeClass, image: `${id}.png`, pxPerCm: Number(pxPerCm.toFixed(6)), width: W, height: H,
+    id, sizeClasses, image: `${id}.png`, pxPerCm: Number(pxPerCm.toFixed(6)), width: W, height: H,
     chestAnchor: { x: W / 2, y: Math.round(bodyY + H * 0.10) },
   }, null, 2) + "\n");
 }
 
 // adult shirt ~ 56 cm wide body → bodyW px / 56 cm ; kids ~ 36 cm
-make("adult-flat", "adult", 2400, 2600, (2400 * 0.56) / 56)
-  .then(() => make("kids-flat", "kids-1-9", 2400, 2600, (2400 * 0.56) / 36))
+make("adult-flat", ["adult"], 2400, 2600, (2400 * 0.56) / 56)
+  .then(() => make("kids-flat", ["kids-0-1", "kids-1-9"], 2400, 2600, (2400 * 0.56) / 36))
   .then(() => console.log("ok"))
   .catch((err) => { console.error(err); process.exitCode = 1; });

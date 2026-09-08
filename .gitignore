@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -45,3 +46,12 @@ tests/engine/__golden__/*.diff.png
 
 # superpowers
 .superpowers/
+
+# playwright
+/test-results/
+/playwright-report/
+
+# session tooling
+.agents/
+.claude/
+skills-lock.json
