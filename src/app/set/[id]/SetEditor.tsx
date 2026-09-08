@@ -46,20 +46,24 @@ function Editor({ initial }: { initial: Initial }) {
 
   const actions = useMemo(
     () => ({
+      // Each returns the failed result untouched; `useAction` toasts its message.
       generateClipart: async () => {
-        const { url } = await generateClipartAction(state.id);
-        dispatch({ type: "setInput", patch: { clipartSrc: url } });
+        const res = await generateClipartAction(state.id);
+        if (!res.ok) return res;
+        dispatch({ type: "setInput", patch: { clipartSrc: res.data.url } });
       },
       uploadClipart: async (file: File) => {
         const form = new FormData();
         form.set("file", file);
-        const { url } = await uploadClipartAction(state.id, form);
-        dispatch({ type: "setInput", patch: { clipartSrc: url } });
+        const res = await uploadClipartAction(state.id, form);
+        if (!res.ok) return res;
+        dispatch({ type: "setInput", patch: { clipartSrc: res.data.url } });
       },
       generateStyle: async (note?: string) => {
-        const { style, aiFallback } = await generateStyleAction(state.id, note);
-        dispatch({ type: "loaded", style });
-        if (aiFallback) show("AI sedang tidak bisa dipakai, gaya cadangan dipakai.", "ok");
+        const res = await generateStyleAction(state.id, note);
+        if (!res.ok) return res;
+        dispatch({ type: "loaded", style: res.data.style });
+        if (res.data.aiFallback) show("AI sedang tidak bisa dipakai, gaya cadangan dipakai.", "ok");
       },
     }),
     [state.id, dispatch, show],
@@ -99,8 +103,9 @@ function Editor({ initial }: { initial: Initial }) {
             title={warning ? "Rapikan layer yang keluar dari area aman dulu" : undefined}
             onClick={() =>
               run("export", async () => {
-                const { zipUrl: url } = await exportSetAction(state.id);
-                setZipUrl(url);
+                const res = await exportSetAction(state.id);
+                if (!res.ok) return res;
+                setZipUrl(res.data.zipUrl);
                 show("Export selesai.", "ok");
               })
             }

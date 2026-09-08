@@ -25,7 +25,10 @@ const DRAFT: SetInput = {
 };
 
 export async function POST(request: Request) {
-  const { id } = await createSet(DRAFT);
+  const created = await createSet(DRAFT);
+  // The draft is built here, not typed by anyone, so a rejection is a bug rather than bad input.
+  if (!created.ok) throw new Error(created.message);
+  const { id } = created.data;
   // 303 so the browser follows with a GET; a 307 would repost to the editor page.
   return NextResponse.redirect(new URL(`/set/${id}`, request.url), 303);
 }

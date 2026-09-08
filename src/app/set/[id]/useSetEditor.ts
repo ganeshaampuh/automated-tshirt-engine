@@ -16,6 +16,7 @@ import {
   type Wording,
 } from "@/engine";
 import { useBrowserMeasurer } from "@/engine/render/browser/useBrowserMeasurer";
+import { UNEXPECTED_MESSAGE, type ActionResult } from "@/lib/actionResult";
 
 /** Layer fields an edit can write, in print px — the same shape `DesignStage` reports. */
 export type LayerPatch = Partial<Omit<TextLayer, "id" | "type">> & Partial<Omit<ImageLayer, "id" | "type">>;
@@ -209,7 +210,7 @@ export type SaveStatus = "saved" | "saving" | "pending" | "invalid" | "error";
 
 /** Injected by the page so this module stays free of server-action imports (and node-testable). */
 export type EditorDeps = {
-  save?: (id: string, patch: { input: SetInput; style?: SetStyle }) => Promise<void>;
+  save?: (id: string, patch: { input: SetInput; style?: SetStyle }) => Promise<ActionResult<void>>;
   onError?: (message: string) => void;
 };
 
@@ -263,12 +264,20 @@ export function useSetEditor(initial: Initial, deps: EditorDeps = {}) {
     const timer = setTimeout(async () => {
       setSaving(true);
       try {
-        await save(state.id, { input: state.input, ...(state.style ? { style: state.style } : {}) });
+        // An expected refusal comes back as data — a message thrown out of a Server Action is
+        // replaced by React with a generic English sentence in production.
+        const result = await save(state.id, { input: state.input, ...(state.style ? { style: state.style } : {}) });
+        if (!result.ok) {
+          setFailed(true);
+          onError?.(result.message);
+          return;
+        }
         setSaved(payload);
         setFailed(false);
       } catch (e) {
+        console.error(e);
         setFailed(true);
-        onError?.(e instanceof Error ? e.message : "Gagal menyimpan perubahan.");
+        onError?.(UNEXPECTED_MESSAGE);
       } finally {
         setSaving(false);
       }

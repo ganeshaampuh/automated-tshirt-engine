@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { UNEXPECTED_MESSAGE, type ActionResult } from "@/lib/actionResult";
 
 /* ---------- toasts ---------- */
 
@@ -103,17 +104,25 @@ export function Section({ title, action, children }: { title: string; action?: R
   );
 }
 
-/** Runs one async action at a time, tracks which one is pending and toasts its error message. */
+/**
+ * Runs one async action at a time, tracks which one is pending and toasts its failure.
+ *
+ * An expected failure comes back as `{ ok: false }` with wording the shop can read; a throw means
+ * something unforeseen, and in a production build its message is React's generic English sentence,
+ * so it is logged and replaced.
+ */
 export function useAction() {
   const [pending, setPending] = useState<string | null>(null);
   const { show } = useToast();
   const run = useCallback(
-    async (key: string, fn: () => Promise<void>) => {
+    async (key: string, fn: () => Promise<ActionResult<unknown> | void>) => {
       setPending(key);
       try {
-        await fn();
+        const result = await fn();
+        if (result && !result.ok) show(result.message);
       } catch (e) {
-        show(e instanceof Error ? e.message : "Gagal menjalankan perintah.");
+        console.error(e);
+        show(UNEXPECTED_MESSAGE);
       } finally {
         setPending(null);
       }
