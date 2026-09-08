@@ -20,13 +20,15 @@ export default async function Home() {
           <h1 className="font-display text-[26px] leading-tight font-medium">Kaos Ulang Tahun</h1>
           <p className="mt-1 text-[14px] text-muted">Satu set kaos keluarga, siap cetak.</p>
         </div>
-        <Link
-          href="/set/new"
-          prefetch={false}
-          className="rounded-[var(--radius-ctl)] bg-tape px-4 py-2 font-display text-[14px] text-ink transition-colors hover:bg-tape-dark hover:text-white"
-        >
-          Buat set baru
-        </Link>
+        {/* A POST, not a link: opening this URL writes a draft row. */}
+        <form action="/set/new" method="post">
+          <button
+            type="submit"
+            className="rounded-[var(--radius-ctl)] bg-tape px-4 py-2 font-display text-[14px] text-ink transition-colors hover:bg-tape-dark hover:text-white"
+          >
+            Buat set baru
+          </button>
+        </form>
       </header>
 
       {rows.length === 0 ? (

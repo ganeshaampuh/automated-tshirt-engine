@@ -29,7 +29,7 @@ export const LAYER_LABEL: Record<string, string> = {
   numeral: "Angka umur",
   clipart: "Clipart",
   top: "Baris atas",
-  ordinal: "Ke-/ordinal",
+  ordinal: "Awalan umur",
   occasion: "Kata acara",
   bottom: "Nama di bawah",
 };

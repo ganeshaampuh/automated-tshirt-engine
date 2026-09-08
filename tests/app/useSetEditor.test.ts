@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { reducer, starterStyle, type Action, type EditorState } from "@/app/set/[id]/useSetEditor";
+import { reducer, safetyWarning, starterStyle, unsafeMemberIds, type Action, type EditorState } from "@/app/set/[id]/useSetEditor";
+import { canvasFor, type Design } from "@/engine";
 import { unicornSet } from "../fixtures/set-unicorn";
 
 function initial(): EditorState {
@@ -133,5 +134,48 @@ describe("useSetEditor reducer", () => {
     const input = initial().input;
     expect(starterStyle({ ...input, clipartSrc: undefined })).toBeNull();
     expect(starterStyle({ ...input, clipartSrc: "/samples/unicorn.png" })?.clipartSrc).toBe("/samples/unicorn.png");
+  });
+});
+
+/** A one-layer design whose image sits inside or outside the 3% safe inset. */
+function design(inset: number): Design {
+  const canvas = canvasFor("adult");
+  return {
+    version: 2,
+    sizeClass: "adult",
+    canvas,
+    shirtColor: "#ffffff",
+    layers: [{ id: "clipart", type: "image", src: "x.png", x: inset, y: inset, w: 100, h: 100 }],
+  };
+}
+
+describe("safe-area reporting", () => {
+  const members = unicornSet("id").input.members;
+  const designs = new Map<string, Design>([
+    ["ayah", design(0)], // starts on the canvas edge, outside the safe inset
+    ["kid", design(500)],
+    ["kenzi", design(0)],
+    ["mama", design(500)],
+  ]);
+
+  it("lists every member whose design leaves the safe area", () => {
+    expect(unsafeMemberIds(designs)).toEqual(["ayah", "kenzi"]);
+  });
+
+  it("reports nothing without designs", () => {
+    expect(unsafeMemberIds(null)).toEqual([]);
+    expect(safetyWarning(members, [])).toBeNull();
+  });
+
+  it("names one offending member", () => {
+    expect(safetyWarning(members, ["mama"])).toBe("Desain Mama keluar dari area aman");
+  });
+
+  it("names several, so a warning off the open tab still reads", () => {
+    expect(safetyWarning(members, ["ayah", "kid", "kenzi"])).toBe("Desain Ayah, Keisya dan Kenzi keluar dari area aman");
+  });
+
+  it("falls back to a placeholder for a member with no label", () => {
+    expect(safetyWarning([{ ...members[0], label: " " }], ["ayah"])).toBe("Desain tanpa nama keluar dari area aman");
   });
 });

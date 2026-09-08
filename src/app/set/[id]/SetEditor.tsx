@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
-import { isWithinSafeArea } from "@/engine";
 import { exportSetAction, generateClipartAction, generateStyleAction, saveSet, uploadClipartAction } from "@/app/actions/sets";
 import { CanvasPanel, type View } from "./components/CanvasPanel";
 import { InputsPanel } from "./components/InputsPanel";
@@ -31,7 +30,7 @@ const STATUS: Record<string, string> = {
 function Editor({ initial }: { initial: Initial }) {
   const { show } = useToast();
   const editor = useSetEditor(initial, { save: saveSet, onError: show });
-  const { state, dispatch, designs, design, error, selected, setSelected, memberId, setMemberId, status } = editor;
+  const { state, dispatch, designs, design, unsafeIds, warning, error, selected, setSelected, memberId, setMemberId, status } = editor;
 
   const [view, setView] = useState<View>("shirt");
   const [scope, setScope] = useState<Scope>("set");
@@ -39,7 +38,6 @@ function Editor({ initial }: { initial: Initial }) {
   const { pending, run } = useAction();
 
   const member = state.input.members.find(m => m.id === memberId);
-  const unsafe = useMemo(() => (designs ? [...designs.values()].some(d => !isWithinSafeArea(d)) : false), [designs]);
 
   const onPatch = useCallback(
     (layerId: string, patch: LayerPatch) => dispatch({ type: "patchLayer", memberId, layerId, patch, scope }),
@@ -61,7 +59,7 @@ function Editor({ initial }: { initial: Initial }) {
       generateStyle: async (note?: string) => {
         const { style, aiFallback } = await generateStyleAction(state.id, note);
         dispatch({ type: "loaded", style });
-        if (aiFallback) show("Gaya dibuat tanpa AI (fallback).", "ok");
+        if (aiFallback) show("AI sedang tidak bisa dipakai, gaya cadangan dipakai.", "ok");
       },
     }),
     [state.id, dispatch, show],
@@ -78,7 +76,16 @@ function Editor({ initial }: { initial: Initial }) {
         <span className={`text-[12px] ${status === "error" || status === "invalid" ? "text-alert" : "text-muted"}`} data-testid="save-status">
           {STATUS[status]}
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
+          {warning && (
+            <button
+              data-testid="safe-area-warning"
+              className="text-[12px] font-medium text-alert underline underline-offset-2"
+              onClick={() => setMemberId(unsafeIds[0])}
+            >
+              {warning}
+            </button>
+          )}
           {zipUrl && (
             <a href={zipUrl} data-testid="export-link" className="font-display text-[13px] underline underline-offset-2">
               Unduh ZIP
@@ -88,8 +95,8 @@ function Editor({ initial }: { initial: Initial }) {
             variant="primary"
             data-testid="export"
             pending={pending === "export"}
-            disabled={unsafe || !designs}
-            title={unsafe ? "Rapikan layer yang keluar dari area aman dulu" : undefined}
+            disabled={Boolean(warning) || !designs}
+            title={warning ? "Rapikan layer yang keluar dari area aman dulu" : undefined}
             onClick={() =>
               run("export", async () => {
                 const { zipUrl: url } = await exportSetAction(state.id);
@@ -111,7 +118,7 @@ function Editor({ initial }: { initial: Initial }) {
         </aside>
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <MemberTabs members={state.input.members} memberId={memberId} onSelect={setMemberId} />
+          <MemberTabs members={state.input.members} memberId={memberId} unsafeIds={unsafeIds} onSelect={setMemberId} />
           <CanvasPanel
             design={design}
             view={view}

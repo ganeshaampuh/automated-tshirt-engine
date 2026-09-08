@@ -6,6 +6,7 @@ import {
   SetInputSchema,
   defaultWording,
   expand,
+  isWithinSafeArea,
   type Design,
   type ImageLayer,
   type Member,
@@ -167,6 +168,20 @@ export function reducer(state: EditorState, action: Action): EditorState {
   }
 }
 
+/** Members whose design has a layer outside the safe area — the ones Export is waiting on. */
+export function unsafeMemberIds(designs: ReadonlyMap<string, Design> | null): string[] {
+  if (!designs) return [];
+  return [...designs].filter(([, d]) => !isWithinSafeArea(d)).map(([id]) => id);
+}
+
+/** The sentence that names them, so a warning off the open tab is still readable. */
+export function safetyWarning(members: readonly Member[], unsafeIds: readonly string[]): string | null {
+  const labels = members.filter(m => unsafeIds.includes(m.id)).map(m => m.label.trim() || "tanpa nama");
+  if (!labels.length) return null;
+  const list = labels.length > 1 ? `${labels.slice(0, -1).join(", ")} dan ${labels[labels.length - 1]}` : labels[0];
+  return `Desain ${list} keluar dari area aman`;
+}
+
 /** Intrinsic pixel size of an image URL — the collage needs it to keep the clipart's aspect ratio. */
 export function useImageSize(src: string | null | undefined) {
   // Keyed by source so a new clipart reports `null` on the render it changes, without a setState
@@ -230,6 +245,8 @@ export function useSetEditor(initial: Initial, deps: EditorDeps = {}) {
   }, [state.input, state.style, measure, clipart]);
 
   const design: Design | null = designs?.get(state.memberId) ?? null;
+  const unsafeIds = useMemo(() => unsafeMemberIds(designs), [designs]);
+  const warning = useMemo(() => safetyWarning(state.input.members, unsafeIds), [state.input.members, unsafeIds]);
   const valid = useMemo(() => SetInputSchema.safeParse(state.input).success, [state.input]);
 
   // Autosave: 800 ms after the last edit. An input that would fail the schema (a cleared name, say)
@@ -266,6 +283,8 @@ export function useSetEditor(initial: Initial, deps: EditorDeps = {}) {
     dispatch,
     designs,
     design,
+    unsafeIds,
+    warning,
     error,
     valid,
     dirty,

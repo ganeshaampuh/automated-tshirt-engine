@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 import type { SetInput } from "@/engine";
 import { createSet } from "@/app/actions/sets";
 
@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
  * A blank order sheet. `SetInputSchema` requires a name, a theme and one birthday kid, so the draft
  * starts with placeholders the shop overwrites in the first two fields rather than empty strings.
  *
- * This is a route handler, not a page: `createSet` revalidates, and Next refuses a write like that
- * during a render.
+ * This is a POST route handler, not a page: `createSet` revalidates, and Next refuses a write like
+ * that during a render — and a draft row must not appear because something followed a link.
  */
 const DRAFT: SetInput = {
   kidName: "Anak",
@@ -24,7 +24,8 @@ const DRAFT: SetInput = {
   ],
 };
 
-export async function GET() {
+export async function POST(request: Request) {
   const { id } = await createSet(DRAFT);
-  redirect(`/set/${id}`);
+  // 303 so the browser follows with a GET; a 307 would repost to the editor page.
+  return NextResponse.redirect(new URL(`/set/${id}`, request.url), 303);
 }

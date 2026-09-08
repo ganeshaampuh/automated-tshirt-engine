@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Language, SetInput } from "@/engine";
 import type { Action } from "../useSetEditor";
 import { SHIRT_COLORS } from "./labels";
@@ -27,6 +27,12 @@ export function InputsPanel({
   const { pending, run } = useAction();
   const [note, setNote] = useState("");
   const file = useRef<HTMLInputElement>(null);
+  const name = useRef<HTMLInputElement>(null);
+
+  // A new set opens on a placeholder name; select it so the first keystroke replaces it.
+  useEffect(() => {
+    name.current?.select();
+  }, []);
   const set = (patch: Partial<SetInput>) => dispatch({ type: "setInput", patch });
 
   return (
@@ -34,8 +40,10 @@ export function InputsPanel({
       <Section title="Pesanan">
         <Field label="Nama anak">
           <input
+            ref={name}
             className="field"
             data-testid="kid-name"
+            autoFocus
             value={input.kidName}
             placeholder="Keisya"
             onChange={e => set({ kidName: e.target.value })}
@@ -132,7 +140,7 @@ export function InputsPanel({
         </div>
       </Section>
 
-      <Section title="Kaos">
+      <Section title="Daftar kaos">
         <MembersList members={input.members} dispatch={dispatch} />
       </Section>
 

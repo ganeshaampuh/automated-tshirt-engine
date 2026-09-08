@@ -13,7 +13,9 @@ test.describe(() => {
     // Export renders a print PNG plus a mockup per member; that is minutes, not seconds.
     test.setTimeout(300_000);
 
-    await page.goto("/set/new");
+    // The draft is created by a POST from the home page, never by opening a URL.
+    await page.goto("/");
+    await page.getByRole("button", { name: "Buat set baru" }).click();
     await expect(page).toHaveURL(/\/set\/[0-9a-f-]{36}$/);
 
     await page.getByTestId("kid-name").fill("Keisya");

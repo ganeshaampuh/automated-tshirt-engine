@@ -22,13 +22,13 @@ export function MembersList({
           <input
             className="field flex-1"
             value={m.label}
-            aria-label={`Nama kaos ${m.label}`}
+            aria-label={`Nama kaos ${m.label.trim() || "tanpa nama"}`}
             onChange={e => dispatch({ type: "updateMember", id: m.id, patch: { label: e.target.value } })}
           />
           <select
             className="field w-[104px] shrink-0"
             value={m.sizeClass}
-            aria-label={`Ukuran ${m.label}`}
+            aria-label={`Ukuran kaos ${m.label.trim() || "tanpa nama"}`}
             onChange={e => dispatch({ type: "updateMember", id: m.id, patch: { sizeClass: e.target.value as SizeClass } })}
           >
             {SIZE_CLASSES.map(s => (
@@ -49,7 +49,7 @@ export function MembersList({
             <Button
               variant="quiet"
               className="size-7 shrink-0 !px-0 text-[15px]"
-              aria-label={`Hapus ${m.label}`}
+              aria-label={`Hapus kaos ${m.label.trim() || "tanpa nama"}`}
               onClick={() => dispatch({ type: "removeMember", id: m.id })}
             >
               ×

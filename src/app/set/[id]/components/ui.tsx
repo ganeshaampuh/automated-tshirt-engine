@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 /* ---------- toasts ---------- */
 
@@ -12,10 +12,22 @@ export const useToast = () => useContext(ToastCtx);
 
 export function ToastHost({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Toast[]>([]);
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const show = useCallback((message: string, tone: Toast["tone"] = "bad") => {
     const id = Date.now() + Math.random();
     setItems(prev => [...prev, { id, message, tone }]);
-    setTimeout(() => setItems(prev => prev.filter(t => t.id !== id)), 5000);
+    const timer = setTimeout(() => {
+      timers.current.delete(timer);
+      setItems(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+    timers.current.add(timer);
+  }, []);
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const t of pending) clearTimeout(t);
+      pending.clear();
+    };
   }, []);
   const api = useMemo(() => ({ show }), [show]);
 

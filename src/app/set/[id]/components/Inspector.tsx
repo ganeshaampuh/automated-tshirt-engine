@@ -93,8 +93,8 @@ export function Inspector({
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <label className="col-span-2 block">
-              <span className="mb-1 block text-[11px] text-muted">Huruf</span>
-              <select className="field" value={layer.font} onChange={e => set({ font: e.target.value })} style={{ fontFamily: layer.font }}>
+              <span className="mb-1 block text-[11px] text-muted">Jenis huruf</span>
+              <select className="field" aria-label="Jenis huruf" value={layer.font} onChange={e => set({ font: e.target.value })} style={{ fontFamily: layer.font }}>
                 {CURATED_FONTS.map(f => (
                   <option key={f} value={f} style={{ fontFamily: f }}>
                     {f}
