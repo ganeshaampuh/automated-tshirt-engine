@@ -19,15 +19,16 @@ export type ShirtAsset = z.infer<typeof ShirtAssetSchema>;
 
 const MOCKUP_DIR = path.join(process.cwd(), "public", "mockups");
 
-export async function loadShirtAsset(id: string): Promise<ShirtAsset> {
-  const file = path.join(MOCKUP_DIR, `${id}.json`);
-  let raw: string;
+export async function loadShirtAsset(id: string, dir: string = MOCKUP_DIR): Promise<ShirtAsset> {
+  const file = path.join(dir, `${id}.json`);
+  let json: unknown;
   try {
-    raw = await readFile(file, "utf8");
-  } catch {
-    throw new Error(`shirt asset "${id}" not found at ${file}`);
+    json = JSON.parse(await readFile(file, "utf8"));
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    throw new Error(`shirt asset "${id}" could not be read from ${file}: ${message}`);
   }
-  const parsed = ShirtAssetSchema.safeParse(JSON.parse(raw));
+  const parsed = ShirtAssetSchema.safeParse(json);
   if (!parsed.success) throw new Error(`shirt asset "${id}" is invalid: ${parsed.error.message}`);
   return parsed.data;
 }
@@ -42,6 +43,12 @@ function hexToRgb(hex: string) {
 }
 
 export async function renderMockup(design: Design, shirt: ShirtAsset, opts: { loadImage: RenderOpts["loadImage"]; width?: number }): Promise<Buffer> {
+  if (shirt.sizeClass !== design.sizeClass) {
+    throw new Error(
+      `shirt asset "${shirt.id}" is for size class "${shirt.sizeClass}" but the design is "${design.sizeClass}"; ` +
+      `pick a shirt with defaultShirtFor(design.sizeClass)`,
+    );
+  }
   const outW = opts.width ?? 2000;
   const base = await sharp(path.join(MOCKUP_DIR, shirt.image)).ensureAlpha().png().toBuffer();
 
@@ -60,10 +67,11 @@ export async function renderMockup(design: Design, shirt: ShirtAsset, opts: { lo
   const left = Math.round(shirt.chestAnchor.x - designW / 2);
   const top = Math.round(shirt.chestAnchor.y);
 
-  // 3. composite with multiply so fabric texture shows through, then flatten + resize.
+  // 3. composite the print over the shirt: a real print is opaque ink, so "over" — "multiply" would
+  //    let a dark shirt swallow the design. (The shirt tint above still multiplies, to keep shading.)
   //    sharp resizes before compositing within one pipeline, so the resize runs in a second pass.
   const composed = await sharp(shirtPng)
-    .composite([{ input: designPng, left, top, blend: "multiply" }])
+    .composite([{ input: designPng, left, top, blend: "over" }])
     .png()
     .toBuffer();
 

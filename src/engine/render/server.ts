@@ -33,7 +33,13 @@ function withRotation(ctx: SKRSContext2D, cx: number, cy: number, deg: number | 
 }
 
 async function drawImage(ctx: SKRSContext2D, l: ImageLayer, load: RenderOpts["loadImage"]) {
-  const img = await load(l.src);
+  let img: ImageLike;
+  try {
+    img = await load(l.src);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    throw new Error(`Failed to load image for layer "${l.id}" from ${l.src}: ${message}`);
+  }
   withRotation(ctx, l.x + l.w / 2, l.y + l.h / 2, l.rotation, () => ctx.drawImage(img as Image, l.x, l.y, l.w, l.h));
 }
 

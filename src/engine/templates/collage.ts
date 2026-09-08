@@ -32,7 +32,9 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
   });
   const numeral: TextLayer = {
     id: "numeral", type: "text", text: numeralText, font, weight: 700, size: numeralSize,
-    color: palette.secondary, stroke: { color: palette.outline, width: 0.012 * S },
+    // Stroke scales with the numeral, not the canvas, so a shrunken numeral keeps its proportions.
+    // 0.02 * numeralSize equals the historical 0.012 * S while the numeral sits at its 0.60 * S start.
+    color: palette.secondary, stroke: { color: palette.outline, width: 0.02 * numeralSize },
     align: "left", x: A.x, y: numeralY, maxWidth: numeralMaxWidth, lines: 1,
   };
 
@@ -54,7 +56,8 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
   const occasion = fitted("occasion", lines.occasion, 0.44 * S, 0.31 * S, A.x + A.w - 0.44 * S, 0.11 * S, "left");
   const bottom = fitted("bottom", lines.bottom, A.x, 0.82 * S, A.w, 0.16 * S, "center");
 
-  // Clamp any text layer whose baseline box would exceed the safe bottom.
+  // `y` is the top of the text box (the renderer draws with textBaseline "top"), so clamp the box
+  // top upwards for any layer whose box would otherwise run past the safe bottom.
   for (const t of [top, ordinal, occasion, bottom]) {
     if (t.y + t.size > A.y + A.h) t.y = A.y + A.h - t.size;
   }
