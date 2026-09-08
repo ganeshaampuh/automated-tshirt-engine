@@ -1,9 +1,10 @@
 # Font licences
 
-Every font shipped in `public/fonts/` is a Google Fonts release, redistributed here under its
-upstream licence. The full licence text for each family lives in `public/fonts/licenses/`, copied
-verbatim from the [google/fonts](https://github.com/google/fonts) repository by
-`scripts/fetch-fonts.sh`.
+Every font shipped in `public/fonts/` is a Google Fonts family, redistributed here under its
+upstream licence. Two of them (Fredoka and Baloo 2) are taken from the upstream repository that
+google/fonts itself packages rather than from google/fonts — see the note below the table. The
+full licence text for each family lives in `public/fonts/licenses/`, copied verbatim from the
+[google/fonts](https://github.com/google/fonts) repository by `scripts/fetch-fonts.sh`.
 
 | Family | Files | Licence | Licence text | Source |
 | --- | --- | --- | --- | --- |

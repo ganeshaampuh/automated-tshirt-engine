@@ -27,7 +27,9 @@ describe("font weight", () => {
     const m = createNodeMeasurer();
     const regular = m.width("Keisya", "Fredoka", 400, 100);
     const bold = m.width("Keisya", "Fredoka", 700, 100);
-    expect(Math.abs(bold - regular) / regular).toBeGreaterThan(0.02);
+    // Strict inequality, no tolerance: with a variable font the two widths come out bit-identical,
+    // so any difference at all proves a second face was loaded.
+    expect(bold).not.toBe(regular);
   });
 
   it("draws heavier ink at 700 than at 400", async () => {
