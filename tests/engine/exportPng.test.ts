@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { PNG } from "pngjs";
 import { exportPrintPng, ExportError } from "@/engine/exportPng";
 import { loadImageFromFile } from "@/engine/render/server";
@@ -16,6 +16,7 @@ describe("exportPrintPng", () => {
     const out = await exportPrintPng(d, loadImageFromFile);
     const png = PNG.sync.read(out.png);
     expect(png.width).toBeLessThan(d.canvas.w);
+    expect(png.height).toBeLessThan(d.canvas.h);
     expect(Math.max(out.widthCm, out.heightCm)).toBeLessThanOrEqual(maxCm("kids-1-9"));
     expect(png.data[3]).toBe(0); // transparent corner
   }, 30_000);
@@ -24,6 +25,8 @@ describe("exportPrintPng", () => {
     const s = unicornSet();
     const d = collage(s, s.input.members[0], ctx);
     d.layers[1] = { ...d.layers[1], x: -50 } as typeof d.layers[1];
-    await expect(exportPrintPng(d, loadImageFromFile)).rejects.toBeInstanceOf(ExportError);
+    const loadImage = vi.fn(loadImageFromFile);
+    await expect(exportPrintPng(d, loadImage)).rejects.toBeInstanceOf(ExportError);
+    expect(loadImage).not.toHaveBeenCalled();
   });
 });
