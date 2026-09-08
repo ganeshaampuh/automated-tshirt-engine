@@ -1,6 +1,6 @@
 {
   "id": "adult-flat",
-  "sizeClass": "adult",
+  "sizeClasses": ["adult"],
   "image": "adult-flat.png",
   "pxPerCm": 24,
   "width": 2400,

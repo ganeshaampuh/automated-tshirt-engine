@@ -8,7 +8,7 @@ import { renderDesign, type RenderOpts } from "./render/server";
 
 export const ShirtAssetSchema = z.object({
   id: z.string().min(1),
-  sizeClass: SizeClassSchema,
+  sizeClasses: SizeClassSchema.array().nonempty(),
   image: z.string().min(1),
   pxPerCm: z.number().positive(),
   chestAnchor: z.object({ x: z.number(), y: z.number() }),
@@ -43,9 +43,9 @@ function hexToRgb(hex: string) {
 }
 
 export async function renderMockup(design: Design, shirt: ShirtAsset, opts: { loadImage: RenderOpts["loadImage"]; width?: number }): Promise<Buffer> {
-  if (shirt.sizeClass !== design.sizeClass) {
+  if (!shirt.sizeClasses.includes(design.sizeClass)) {
     throw new Error(
-      `shirt asset "${shirt.id}" is for size class "${shirt.sizeClass}" but the design is "${design.sizeClass}"; ` +
+      `shirt asset "${shirt.id}" serves [${shirt.sizeClasses.join(", ")}] but the design is "${design.sizeClass}"; ` +
       `pick a shirt with defaultShirtFor(design.sizeClass)`,
     );
   }

@@ -106,7 +106,7 @@ describe("mockup", () => {
   it("rejects a sidecar with an unknown size class", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "shirt-asset-"));
     await writeFile(path.join(dir, "bogus.json"), JSON.stringify({
-      id: "bogus", sizeClass: "xl", image: "bogus.png", pxPerCm: 24,
+      id: "bogus", sizeClasses: ["xl"], image: "bogus.png", pxPerCm: 24,
       chestAnchor: { x: 10, y: 10 }, width: 100, height: 100,
     }));
     await expect(loadShirtAsset("bogus", dir)).rejects.toThrow(/shirt asset "bogus" is invalid/);
@@ -118,13 +118,23 @@ describe("mockup", () => {
     await expect(loadShirtAsset("broken", dir)).rejects.toThrow(/shirt asset "broken" could not be read/);
   });
 
-  it("refuses a shirt whose size class differs from the design", async () => {
+  it("refuses a shirt whose size classes don't include the design's", async () => {
     const s = unicornSet();
     const kid = s.input.members[1];
     const d = collage(s, kid, ctx);                       // kids-1-9
-    const shirt = await loadShirtAsset("adult-flat");     // adult
+    const shirt = await loadShirtAsset("adult-flat");     // [adult]
     await expect(renderMockup(d, shirt, { loadImage: loadImageFromFile, width: 200 })).rejects.toThrow(
-      /size class "adult" but the design is "kids-1-9"/,
+      /shirt asset "adult-flat" serves \[adult\] but the design is "kids-1-9"/,
     );
+  }, 30_000);
+
+  it("accepts kids-0-1 and kids-1-9 designs on the shared kids-flat shirt", async () => {
+    const s = unicornSet();
+    const shirt = await loadShirtAsset("kids-flat");
+    for (const sizeClass of ["kids-0-1", "kids-1-9"] as const) {
+      const kid = { ...s.input.members[1], sizeClass };
+      const d = collage(s, kid, ctx);
+      await expect(renderMockup(d, shirt, { loadImage: loadImageFromFile, width: 200 })).resolves.toBeInstanceOf(Buffer);
+    }
   }, 30_000);
 });
