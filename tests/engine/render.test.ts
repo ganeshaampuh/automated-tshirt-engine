@@ -33,6 +33,26 @@ describe("renderDesign", () => {
     expect(blue).toBeGreaterThan(1000);
   });
 
+  it("draws the shadow for text that has no stroke", async () => {
+    const layer = (shadow: boolean): Design["layers"][number] => ({
+      id: "n", type: "text", text: "5", font: "Fredoka", weight: 700, size: 300, color: "#ff0000",
+      ...(shadow ? { shadow: { color: "#000000", blur: 0, dx: 40, dy: 40 } } : {}),
+      align: "center", x: 0, y: 30, maxWidth: 500, lines: 1,
+    });
+    const design = (shadow: boolean): Design => ({ version: 2, sizeClass: "adult",
+      canvas: { w: 500, h: 500, dpi: 300 }, shirtColor: "#ffffff", layers: [layer(shadow)] });
+    const o = { scale: 1, loadImage: loadImageFromFile };
+    const withShadow = PNG.sync.read(await renderDesign(design(true), o));
+    const plain = PNG.sync.read(await renderDesign(design(false), o));
+
+    // Pixels the shadow paints outside the glyph: opaque here, fully transparent without the shadow.
+    let outside = 0;
+    for (let i = 0; i < withShadow.data.length; i += 4) {
+      if (withShadow.data[i + 3] > 200 && plain.data[i + 3] === 0) outside++;
+    }
+    expect(outside).toBeGreaterThan(1000);
+  });
+
   it("matches goldens for every member, en and id", async () => {
     for (const lang of ["en", "id"] as const) {
       const s = unicornSet(lang);

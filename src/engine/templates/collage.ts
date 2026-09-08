@@ -2,6 +2,7 @@ import type { Design, ImageLayer, Member, Set, TextLayer } from "../types";
 import { canvasFor, safeArea } from "../sizing";
 import { fitText, type TextMeasurer } from "../textFit";
 import { resolveLines } from "../wording";
+import { displayText } from "../text";
 
 export type TemplateContext = { measure: TextMeasurer; clipart: { w: number; h: number } };
 
@@ -18,7 +19,8 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
   const fitted = (id: string, text: string, x: number, y: number, maxWidth: number, startSize: number,
     align: TextLayer["align"], extra: Partial<TextLayer> = {}): TextLayer => {
     const weight = 700 as const;
-    const { size } = fitText(ctx.measure, { text, font, weight, maxWidth, startSize, minSize });
+    // Measure what the renderer will actually draw: `transform: "upper"` is applied before drawing.
+    const { size } = fitText(ctx.measure, { text: displayText({ text, transform: extra.transform }), font, weight, maxWidth, startSize, minSize });
     return { id, type: "text", text, font, weight, size, color: palette.primary, align, x, y, maxWidth, lines: 1, ...extra };
   };
 
@@ -34,20 +36,21 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
     align: "left", x: A.x, y: numeralY, maxWidth: numeralMaxWidth, lines: 1,
   };
 
-  // clipart: fit into a 0.60S x 0.48S box, right-aligned to safe edge, bottom at 0.80S
-  const boxW = 0.60 * S, boxH = 0.48 * S;
+  // clipart: fit into a 0.60S x 0.38S box, right-aligned to safe edge, bottom at 0.82S
+  const boxW = 0.60 * S, boxH = 0.38 * S;
   const scale = Math.min(boxW / ctx.clipart.w, boxH / ctx.clipart.h);
   const cw = ctx.clipart.w * scale, ch = ctx.clipart.h * scale;
   const clipart: ImageLayer = { id: "clipart", type: "image", src: set.style.clipartSrc,
-    x: A.x + A.w - cw, y: 0.80 * S - ch, w: cw, h: ch };
+    x: A.x + A.w - cw, y: 0.82 * S - ch, w: cw, h: ch };
 
   const top = fitted("top", lines.top, A.x, A.y, A.w, 0.13 * S, "center");
 
   const ordinal = lines.ordinalBeforeNumeral
     ? fitted("ordinal", lines.ordinal, A.x, 0.18 * S, 0.30 * S, 0.07 * S, "left")
-    : fitted("ordinal", lines.ordinal, 0.44 * S, 0.26 * S, 0.14 * S, 0.07 * S, "left", { transform: "upper" });
+    : fitted("ordinal", lines.ordinal, 0.44 * S, 0.24 * S, 0.14 * S, 0.07 * S, "left", { transform: "upper" });
 
-  const occasion = fitted("occasion", lines.occasion, 0.44 * S, 0.34 * S, A.x + A.w - 0.44 * S, 0.11 * S, "left");
+  // occasion sits above the clipart: y 0.31S + start size 0.11S ends at 0.42S, clear of the clipart top (0.44S).
+  const occasion = fitted("occasion", lines.occasion, 0.44 * S, 0.31 * S, A.x + A.w - 0.44 * S, 0.11 * S, "left");
   const bottom = fitted("bottom", lines.bottom, A.x, 0.82 * S, A.w, 0.16 * S, "center");
 
   // Clamp any text layer whose baseline box would exceed the safe bottom.

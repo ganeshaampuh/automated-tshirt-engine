@@ -2,6 +2,7 @@ import { createCanvas, loadImage, type Image, type SKRSContext2D } from "@napi-r
 import { readFile } from "node:fs/promises";
 import type { Design, TextLayer, ImageLayer } from "../types";
 import { ensureNodeFonts } from "../measure";
+import { displayText } from "../text";
 
 export type ImageLike = Image;
 export type RenderOpts = { scale?: number; background?: string | null; loadImage: (src: string) => Promise<ImageLike> };
@@ -36,7 +37,7 @@ async function drawImage(ctx: SKRSContext2D, l: ImageLayer, load: RenderOpts["lo
   withRotation(ctx, l.x + l.w / 2, l.y + l.h / 2, l.rotation, () => ctx.drawImage(img as Image, l.x, l.y, l.w, l.h));
 }
 
-export function displayText(l: TextLayer) { return l.transform === "upper" ? l.text.toUpperCase() : l.text; }
+export { displayText };
 
 function drawText(ctx: SKRSContext2D, l: TextLayer) {
   const text = displayText(l);
@@ -52,8 +53,10 @@ function drawText(ctx: SKRSContext2D, l: TextLayer) {
     if (l.stroke && l.stroke.width > 0) {
       ctx.lineJoin = "round"; ctx.lineWidth = l.stroke.width * 2; ctx.strokeStyle = l.stroke.color;
       ctx.strokeText(text, ax, l.y);
+      // The stroke already cast the shadow for the whole glyph; a second one from the fill would
+      // darken it. Without a stroke pass the fill is what must cast it, so keep the shadow on.
+      ctx.shadowColor = "transparent";
     }
-    ctx.shadowColor = "transparent";
     ctx.fillStyle = l.color;
     ctx.fillText(text, ax, l.y);
     ctx.restore();
