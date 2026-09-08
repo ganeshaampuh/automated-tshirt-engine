@@ -5,11 +5,20 @@ import pixelmatch from "pixelmatch";
 
 const DIR = path.join(__dirname, "__golden__");
 
-/** Compare `actual` (PNG buffer) with the stored golden. Creates it if missing or UPDATE_GOLDEN=1. Returns mismatched pixel ratio. */
+/**
+ * Compare `actual` (PNG buffer) with the stored golden and throw when they differ by more than
+ * `maxRatio`. Creates the golden when it is missing locally, or whenever UPDATE_GOLDEN=1. On CI a
+ * missing golden is an error instead — a golden that writes itself would silently pass.
+ */
 export function expectGolden(name: string, actual: Buffer, maxRatio = 0.002) {
   mkdirSync(DIR, { recursive: true });
   const file = path.join(DIR, `${name}.png`);
-  if (!existsSync(file) || process.env.UPDATE_GOLDEN === "1") {
+  if (process.env.UPDATE_GOLDEN === "1") {
+    writeFileSync(file, actual);
+    return;
+  }
+  if (!existsSync(file)) {
+    if (process.env.CI) throw new Error(`Missing golden ${name}; run UPDATE_GOLDEN=1 locally`);
     writeFileSync(file, actual);
     return;
   }

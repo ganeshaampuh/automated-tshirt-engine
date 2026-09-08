@@ -34,13 +34,27 @@ describe("collage template", () => {
     expect(text(ayah, "numeral").stroke?.color).toBe("#e6007e");
   });
 
-  it("every layer stays inside the safe area and the size limit, for all members and languages", () => {
+  it("every layer stays inside the safe area and the size limit, for all members, languages and size classes", () => {
+    // The fixture covers adult and kids-1-9; kids-0-1 has the smallest canvas, so sweep a copy of
+    // the set with every member forced to it as well.
+    const variants = [
+      { name: "as-authored", make: (s: ReturnType<typeof unicornSet>) => s },
+      {
+        name: "kids-0-1",
+        make: (s: ReturnType<typeof unicornSet>) => {
+          for (const m of s.input.members) m.sizeClass = "kids-0-1" as const;
+          return s;
+        },
+      },
+    ];
     for (const lang of ["en", "id"] as const) {
-      const s = unicornSet(lang);
-      for (const m of s.input.members) {
-        const d = collage(s, m, ctx);
-        expect(isWithinSafeArea(d), `${lang}/${m.label}`).toBe(true);
-        expect(boundingBoxCm(d).longest).toBeLessThanOrEqual(maxCm(m.sizeClass));
+      for (const variant of variants) {
+        const s = variant.make(unicornSet(lang));
+        for (const m of s.input.members) {
+          const d = collage(s, m, ctx);
+          expect(isWithinSafeArea(d), `${lang}/${variant.name}/${m.label}`).toBe(true);
+          expect(boundingBoxCm(d).longest, `${lang}/${variant.name}/${m.label}`).toBeLessThanOrEqual(maxCm(m.sizeClass));
+        }
       }
     }
   });

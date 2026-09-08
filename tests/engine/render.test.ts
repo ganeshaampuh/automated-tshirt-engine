@@ -53,6 +53,14 @@ describe("renderDesign", () => {
     expect(outside).toBeGreaterThan(1000);
   });
 
+  it("names the layer when an image fails to load", async () => {
+    const d: Design = { version: 2, sizeClass: "adult", canvas: { w: 100, h: 100, dpi: 300 }, shirtColor: "#ffffff",
+      layers: [{ id: "clipart", type: "image", src: "tests/fixtures/does-not-exist.png", x: 0, y: 0, w: 100, h: 100 }] };
+    await expect(renderDesign(d, { scale: 1, loadImage: loadImageFromFile })).rejects.toThrow(
+      /Failed to load image for layer "clipart" from tests\/fixtures\/does-not-exist\.png: /,
+    );
+  });
+
   it("matches goldens for every member, en and id", async () => {
     for (const lang of ["en", "id"] as const) {
       const s = unicornSet(lang);
@@ -62,4 +70,11 @@ describe("renderDesign", () => {
       }
     }
   }, 60_000);
+
+  it("matches the golden for a kids-0-1 canvas", async () => {
+    const s = unicornSet("en");
+    const kid = s.input.members.find(m => m.id === "kid")!;
+    kid.sizeClass = "kids-0-1";
+    expectGolden("collage-en-kid-0-1", await renderDesign(collage(s, kid, ctx), opts));
+  }, 30_000);
 });
