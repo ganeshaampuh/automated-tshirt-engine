@@ -5,7 +5,7 @@ import { db, schema } from "@/db";
 
 export const dynamic = "force-dynamic";
 
-const STATUS: Record<string, string> = { draft: "Draft", ready: "Siap", exported: "Sudah export", error: "Gagal" };
+const STATUS: Record<string, string> = { draft: "Draft", ready: "Siap", error: "Gagal" };
 
 const when = (d: Date) =>
   new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d);

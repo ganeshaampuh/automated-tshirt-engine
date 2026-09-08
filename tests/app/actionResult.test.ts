@@ -43,3 +43,21 @@ describe("set actions", () => {
     }
   });
 });
+
+describe("exportSetAction", () => {
+  // Export records itself in `exportUrl`. Writing `status` too would demote an approved set the
+  // moment someone re-exported it.
+  it("does not write status", () => {
+    const body = source.slice(source.indexOf("export async function exportSetAction"));
+    expect(body).toContain("exportUrl: zipUrl");
+    expect(body).not.toMatch(/status:/);
+  });
+});
+
+describe("home page status map", () => {
+  const page = readFileSync(path.join(__dirname, "..", "..", "src", "app", "page.tsx"), "utf8");
+
+  it("lists no status the app never writes", () => {
+    expect(page).not.toContain("exported:");
+  });
+});

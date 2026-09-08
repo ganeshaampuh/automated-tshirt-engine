@@ -172,8 +172,10 @@ export async function exportSetAction(
     } catch (e) {
       fail("Gagal membuat file export, coba lagi.", e);
     }
+    // `status` is deliberately untouched: `exportUrl` is the record that an export happened, and a
+    // re-export must not demote a set someone has already approved.
     try {
-      await write(id, { exportUrl: zipUrl, status: "ready" });
+      await write(id, { exportUrl: zipUrl });
     } catch (e) {
       fail("Gagal menyimpan hasil export.", e);
     }
