@@ -23,10 +23,15 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
   };
 
   const numeralY = lines.ordinalBeforeNumeral ? 0.26 * S : 0.22 * S;
+  const numeralText = String(set.input.age);
+  const numeralMaxWidth = 0.42 * S;
+  const { size: numeralSize } = fitText(ctx.measure, {
+    text: numeralText, font, weight: 700, maxWidth: numeralMaxWidth, startSize: 0.60 * S, minSize,
+  });
   const numeral: TextLayer = {
-    id: "numeral", type: "text", text: String(set.input.age), font, weight: 700, size: 0.60 * S,
+    id: "numeral", type: "text", text: numeralText, font, weight: 700, size: numeralSize,
     color: palette.secondary, stroke: { color: palette.outline, width: 0.012 * S },
-    align: "left", x: A.x, y: numeralY, maxWidth: 0.42 * S, lines: 1,
+    align: "left", x: A.x, y: numeralY, maxWidth: numeralMaxWidth, lines: 1,
   };
 
   // clipart: fit into a 0.60S x 0.48S box, right-aligned to safe edge, bottom at 0.80S

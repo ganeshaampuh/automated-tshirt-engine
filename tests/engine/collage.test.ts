@@ -55,9 +55,26 @@ describe("collage template", () => {
   it("long names shrink to fit", () => {
     const s = unicornSet("en");
     s.input.kidName = "Muhammad Rizky Ramadhan Putra";
+    s.style.wording.familyTop = s.input.kidName;
     const d = collage(s, s.input.members[0], ctx);
     const t = text(d, "top");
+    expect(t.text).toBe(s.input.kidName);
     expect(measure.width(t.text, t.font, t.weight, t.size)).toBeLessThanOrEqual(t.maxWidth);
+    expect(t.size).toBeLessThan(0.13 * canvasFor("adult").w);
+  });
+
+  it("numeral shrinks to fit for large ages, but not for small ones", () => {
+    const s10 = unicornSet("en"); s10.input.age = 10;
+    const s100 = unicornSet("en"); s100.input.age = 100;
+    const d10 = collage(s10, s10.input.members[0], ctx);
+    const d100 = collage(s100, s100.input.members[0], ctx);
+    const n10 = text(d10, "numeral"), n100 = text(d100, "numeral");
+    expect(measure.width(n10.text, n10.font, n10.weight, n10.size)).toBeLessThanOrEqual(n10.maxWidth);
+    expect(measure.width(n100.text, n100.font, n100.weight, n100.size)).toBeLessThanOrEqual(n100.maxWidth);
+
+    const d5 = collage(set, set.input.members[0], ctx);
+    const n5 = text(d5, "numeral");
+    expect(n5.size).toBe(0.60 * canvasFor("adult").w);
   });
 
   it("indonesian moves ordinal before the numeral", () => {
