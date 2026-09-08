@@ -29,6 +29,18 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Testing
+
+```bash
+pnpm test
+```
+
+Database tests (`tests/db/**`) are skipped unless `DATABASE_URL` is set. Run them with your local env loaded:
+
+```bash
+pnpm dlx dotenv-cli -e .env.local -- pnpm test tests/db
+```
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
