@@ -88,6 +88,10 @@ Model ids and the base URL live only in `src/ai/config.ts`. Never log any of the
 | `pnpm db:studio` | Drizzle Studio against `DATABASE_URL`. |
 | `pnpm gen:fonts` | Regenerate `src/app/fonts.css` from the font registry in `src/engine/fonts.ts`. Run it after adding a font file. |
 
+CI (`.github/workflows/ci.yml`) runs `tsc --noEmit`, `pnpm lint` and `pnpm test` with `CI=true` on
+every push to `main` and every pull request; no `DATABASE_URL` is configured there, so the database
+specs skip and a missing golden hard-fails instead of being written.
+
 Database tests (`tests/db/**`) are skipped unless `DATABASE_URL` is set. Run them with your local
 env loaded:
 
