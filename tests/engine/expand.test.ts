@@ -25,4 +25,10 @@ describe("expand", () => {
     const d = expand(unicornSet(), ctx)[0].design;
     expect(applyOverrides(d, { nope: { x: 1 } })).toEqual(d);
   });
+
+  it("throws when an override produces an invalid layer", () => {
+    const d = expand(unicornSet(), ctx)[0].design;
+    expect(() => applyOverrides(d, { clipart: { w: -1 } })).toThrow();
+    expect(() => applyOverrides(d, { bottom: { color: "red" } })).toThrow();
+  });
 });
