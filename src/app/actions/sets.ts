@@ -40,6 +40,7 @@ export async function createSet(input: SetInput): Promise<{ id: string }> {
   if (!parsed.success) fail("Data desain tidak valid.", parsed.error);
   try {
     const [row] = await db.insert(sets).values({ input: parsed.data, status: "draft" }).returning({ id: sets.id });
+    revalidatePath("/");
     return { id: row.id };
   } catch (e) {
     fail("Gagal menyimpan desain.", e);
@@ -146,7 +147,7 @@ export async function exportSetAction(id: string): Promise<{ zipUrl: string; siz
     fail("Gagal membuat file export, coba lagi.", e);
   }
   try {
-    await write(id, { exportUrl: zipUrl, status: "exported" });
+    await write(id, { exportUrl: zipUrl, status: "ready" });
   } catch (e) {
     fail("Gagal menyimpan hasil export.", e);
   }
