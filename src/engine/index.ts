@@ -1,1 +1,12 @@
 export const ENGINE_VERSION = 2 as const;
+export * from "./types";
+export * from "./sizing";
+export * from "./fonts";
+export { createNodeMeasurer, type TextMeasurer } from "./measure";
+export { fitText } from "./textFit";
+export { defaultWording, ordinalSuffix, resolveLines } from "./wording";
+export { collage, type TemplateContext } from "./templates/collage";
+export { expand, applyOverrides } from "./expand";
+export { renderDesign, loadImageFromFile, displayText, type RenderOpts } from "./render/server";
+export { exportPrintPng, ExportError } from "./exportPng";
+export { renderMockup, loadShirtAsset, defaultShirtFor, type ShirtAsset, ShirtAssetSchema } from "./mockup";
