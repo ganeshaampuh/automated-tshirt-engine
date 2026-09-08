@@ -17,6 +17,15 @@ describe("fitText", () => {
   it("floors at minSize", () => {
     expect(fitText(fake, { text: "x".repeat(200), font: "Fredoka", weight: 700, maxWidth: 100, startSize: 200, minSize: 40 }).size).toBe(40);
   });
+  it("never returns below a non-integer minSize", () => {
+    const r = fitText(fake, { text: "x".repeat(200), font: "Fredoka", weight: 700, maxWidth: 100, startSize: 200, minSize: 85.04 });
+    expect(r.size).toBeGreaterThanOrEqual(85.04);
+    expect(r.size).toBe(86);
+  });
+  it("clamps to startSize when minSize exceeds startSize", () => {
+    const r = fitText(fake, { text: "Hi", font: "Fredoka", weight: 700, maxWidth: 1000, startSize: 50, minSize: 100 });
+    expect(r.size).toBeLessThanOrEqual(50);
+  });
   it("node measurer measures real fonts", () => {
     const m = createNodeMeasurer();
     const w = m.width("Keisya", "Fredoka", 700, 100);
