@@ -31,7 +31,8 @@ describe("bounding box", () => {
       { id: "a", type: "image", src: "x", x: 100, y: 200, w: 500, h: 400 },
       { id: "b", type: "text", text: "Hi", font: "Fredoka", weight: 700, size: 100, color: "#000", align: "center", x: 50, y: 900, maxWidth: 800, lines: 1 },
     ]);
-    expect(boundingBox(d)).toEqual({ x: 50, y: 200, w: 800, h: 800 });
+    // The text layer's box bottom includes the descender allowance: 900 + 100 * 1.25 = 1025.
+    expect(boundingBox(d)).toEqual({ x: 50, y: 200, w: 800, h: 825 });
   });
   it("reports cm using 300 dpi", () => {
     const d = design(3425, [{ id: "a", type: "image", src: "x", x: 0, y: 0, w: 3425, h: 1000 }]);

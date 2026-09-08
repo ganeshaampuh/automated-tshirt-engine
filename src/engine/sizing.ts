@@ -16,9 +16,23 @@ export function safeArea(c: Canvas): Rect {
   return { x, y, w: c.w - 2 * x, h: c.h - 2 * y };
 }
 
+/**
+ * Extra height below the last baseline box to cover descenders (g, j, p, y) and the diacritics
+ * that push a cap-height glyph past its nominal `size`. Applied per line.
+ */
+export const DESCENDER_RATIO = 0.25;
+
+/** Ink bounds of a layer: the layout box grown by the descender allowance and the stroke width. */
 export function layerBounds(l: Layer): Rect {
   if (l.type === "image") return { x: l.x, y: l.y, w: l.w, h: l.h };
-  return { x: l.x, y: l.y, w: l.maxWidth, h: l.size * (l.lines ?? 1) };
+  // A stroke is centred on the glyph outline, so its outer half spills `width` past the box on
+  // every side once the renderer's line width is accounted for.
+  const s = l.stroke?.width ?? 0;
+  return {
+    x: l.x - s, y: l.y - s,
+    w: l.maxWidth + 2 * s,
+    h: l.size * (l.lines ?? 1) * (1 + DESCENDER_RATIO) + 2 * s,
+  };
 }
 
 export function boundingBox(d: Design): Rect {

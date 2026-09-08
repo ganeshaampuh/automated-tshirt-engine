@@ -41,8 +41,9 @@ which implements the same `TextMeasurer` interface (`textFit.ts`) that
 
 ## Known limitations
 
-- `layerBounds()` measures the *layout box* of a text layer (`maxWidth` × `size · lines`), not the
-  ink the glyphs actually put down. Descenders and the outer half of a stroke can spill a little
-  past that box, so `isWithinSafeArea()` and `boundingBoxCm()` are approximations — tight, but not
-  exact. `exportPrintPng()` compensates with a 1% margin. An ink-aware bounds measurement plus a
-  retune of the template's slack is scheduled for plan 2.
+- `layerBounds()` is ink-aware: a text layer's box is `maxWidth` × `size · lines · (1 +
+  DESCENDER_RATIO)`, grown by the stroke width on every side, so descenders and the outer half of a
+  stroke are accounted for. It is still a conservative *envelope* rather than a per-glyph trace — a
+  line with no descender (a numeral, say) reserves height it does not use — so `isWithinSafeArea()`
+  and `boundingBoxCm()` never under-report, but may over-report. `exportPrintPng()` keeps its 1%
+  margin.
