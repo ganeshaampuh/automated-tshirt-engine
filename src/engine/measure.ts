@@ -1,9 +1,6 @@
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
-import { registerFonts } from "./fonts";
-
-export interface TextMeasurer {
-  width(text: string, font: string, weight: number, size: number, letterSpacing?: number): number;
-}
+import { registerFonts } from "./fonts.node";
+import type { TextMeasurer } from "./textFit";
 
 let fontsRegistered = false;
 export function ensureNodeFonts() {

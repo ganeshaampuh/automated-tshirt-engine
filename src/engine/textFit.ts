@@ -1,5 +1,6 @@
-import type { TextMeasurer } from "./measure";
-export type { TextMeasurer };
+export interface TextMeasurer {
+  width(text: string, font: string, weight: number, size: number, letterSpacing?: number): number;
+}
 
 export type FitOpts = {
   text: string; font: string; weight: number;

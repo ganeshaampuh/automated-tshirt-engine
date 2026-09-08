@@ -43,8 +43,6 @@ async function drawImage(ctx: SKRSContext2D, l: ImageLayer, load: RenderOpts["lo
   withRotation(ctx, l.x + l.w / 2, l.y + l.h / 2, l.rotation, () => ctx.drawImage(img as Image, l.x, l.y, l.w, l.h));
 }
 
-export { displayText };
-
 function drawText(ctx: SKRSContext2D, l: TextLayer) {
   const text = displayText(l);
   ctx.font = `${l.weight} ${l.size}px "${l.font}"`;

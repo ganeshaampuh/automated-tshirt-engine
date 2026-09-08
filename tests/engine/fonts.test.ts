@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
-import { CURATED_FONTS, fontFilePath, registerFonts } from "@/engine/fonts";
+import { CURATED_FONTS } from "@/engine/fonts";
+import { fontFilePath, registerFonts } from "@/engine/fonts.node";
 
 describe("fonts", () => {
   it("lists six curated families", () => {
