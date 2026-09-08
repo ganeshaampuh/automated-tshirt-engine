@@ -1,4 +1,4 @@
-import type { SizeClass } from "@/engine";
+import type { FontWeight, SizeClass } from "@/engine";
 
 export const SIZE_LABEL: Record<SizeClass, string> = {
   adult: "Dewasa",
@@ -24,6 +24,13 @@ export const QUICK_MEMBERS: { label: string; sizeClass: SizeClass }[] = [
   { label: "Kakak", sizeClass: "kids-1-9" },
   { label: "Adik", sizeClass: "kids-1-9" },
 ];
+
+/** One entry per weight the font registry can ship; the Inspector's weight select reads it. */
+export const WEIGHT_LABEL: Record<FontWeight, string> = {
+  400: "Normal",
+  700: "Tebal",
+  900: "Sangat tebal",
+};
 
 export const LAYER_LABEL: Record<string, string> = {
   numeral: "Angka umur",

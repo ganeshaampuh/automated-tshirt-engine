@@ -1,11 +1,9 @@
 "use client";
 
-import { CURATED_FONTS, type Design, type Layer, type Member } from "@/engine";
+import { CURATED_FONTS, fontWeights, nearestWeight, type Design, type Layer, type Member } from "@/engine";
 import type { LayerPatch } from "../useSetEditor";
-import { LAYER_LABEL } from "./labels";
+import { LAYER_LABEL, WEIGHT_LABEL } from "./labels";
 import { Button, Field, Section } from "./ui";
-
-const WEIGHTS = [400, 700, 900] as const;
 
 function Num({ label, value, step = 1, onChange }: { label: string; value: number; step?: number; onChange: (n: number) => void }) {
   return (
@@ -66,6 +64,7 @@ export function Inspector({
     );
   }
   const set = (patch: LayerPatch) => onPatch(layer.id, patch);
+  const weights = layer.type === "text" ? fontWeights(layer.font) : [];
   const overridden = Boolean(member?.overrides?.[layer.id]);
 
   return (
@@ -94,7 +93,17 @@ export function Inspector({
           <div className="grid grid-cols-2 gap-2">
             <label className="col-span-2 block">
               <span className="mb-1 block text-[11px] text-muted">Jenis huruf</span>
-              <select className="field" aria-label="Jenis huruf" value={layer.font} onChange={e => set({ font: e.target.value })} style={{ fontFamily: layer.font }}>
+              <select
+                className="field"
+                aria-label="Jenis huruf"
+                value={layer.font}
+                onChange={e => {
+                  const font = e.target.value;
+                  // A family only ships some weights; keep the layer on a face that exists.
+                  set({ font, weight: nearestWeight(font, layer.weight) });
+                }}
+                style={{ fontFamily: layer.font }}
+              >
                 {CURATED_FONTS.map(f => (
                   <option key={f} value={f} style={{ fontFamily: f }}>
                     {f}
@@ -104,13 +113,22 @@ export function Inspector({
             </label>
             <label className="block">
               <span className="mb-1 block text-[11px] text-muted">Tebal</span>
-              <select className="field" value={layer.weight} onChange={e => set({ weight: Number(e.target.value) as 400 | 700 | 900 })}>
-                {WEIGHTS.map(w => (
+              <select
+                className="field disabled:opacity-45"
+                aria-label="Tebal"
+                value={layer.weight}
+                disabled={weights.length < 2}
+                onChange={e => set({ weight: Number(e.target.value) as 400 | 700 | 900 })}
+              >
+                {weights.map(w => (
                   <option key={w} value={w}>
-                    {w}
+                    {WEIGHT_LABEL[w]}
                   </option>
                 ))}
               </select>
+              {weights.length < 2 && (
+                <span className="mt-1 block text-[11px] text-muted">{layer.font} hanya punya satu ketebalan.</span>
+              )}
             </label>
             <Num label="Ukuran (px)" value={layer.size} onChange={size => size > 0 && set({ size })} />
             <label className="block">
