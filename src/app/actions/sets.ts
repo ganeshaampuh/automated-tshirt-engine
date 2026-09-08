@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import sharp from "sharp";
 import { SetInputSchema, SetStyleSchema, type SetInput, type SetStyle } from "@/engine";
 import { createNodeMeasurer, loadImageFromFile } from "@/engine/server";
 import { getProvider, generateClipart, describeClipart, chooseStyle } from "@/ai";
 import { db, schema } from "@/db";
 import { putBlob } from "@/lib/blob";
 import { clipartSize, exportSetZip } from "@/lib/sets";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE, processClipartUpload } from "@/lib/upload";
 
 const { sets } = schema;
 
@@ -96,12 +96,10 @@ export async function uploadClipartAction(id: string, form: FormData): Promise<{
   const loaded = await loadSet(id);
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) throw new Error("Pilih file gambar dulu.");
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error(MAX_UPLOAD_MESSAGE);
   let png: Buffer, width: number, height: number, url: string;
   try {
-    // Uploads are kept as-is apart from trimming blank borders — no background removal.
-    const source = sharp(Buffer.from(await file.arrayBuffer()));
-    png = await source.trim().png().toBuffer().catch(() => source.png().toBuffer());
-    ({ width = 0, height = 0 } = await sharp(png).metadata());
+    ({ png, width, height } = await processClipartUpload(Buffer.from(await file.arrayBuffer())));
     url = await putBlob(`clipart/upload-${Date.now()}.png`, png, "image/png");
   } catch (e) {
     fail("Gagal memproses gambar, coba file lain.", e);

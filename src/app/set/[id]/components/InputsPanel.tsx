@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Language, SetInput } from "@/engine";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE } from "@/lib/upload";
 import type { Action } from "../useSetEditor";
 import { SHIRT_COLORS } from "./labels";
 import { MembersList } from "./MembersList";
-import { Button, Field, Section, useAction } from "./ui";
+import { Button, Field, Section, useAction, useToast } from "./ui";
 
 export type InputsActions = {
   generateClipart: () => Promise<void>;
@@ -25,6 +26,7 @@ export function InputsPanel({
   actions: InputsActions;
 }) {
   const { pending, run } = useAction();
+  const { show } = useToast();
   const [note, setNote] = useState("");
   const file = useRef<HTMLInputElement>(null);
   const name = useRef<HTMLInputElement>(null);
@@ -133,7 +135,14 @@ export function InputsPanel({
               onChange={e => {
                 const f = e.target.files?.[0];
                 e.target.value = "";
-                if (f) run("upload", () => actions.uploadClipart(f));
+                if (!f) return;
+                // Refused here rather than at the server: an oversized post is rejected by the
+                // request body limit before the action runs, so it could never explain itself.
+                if (f.size > MAX_UPLOAD_BYTES) {
+                  show(MAX_UPLOAD_MESSAGE);
+                  return;
+                }
+                run("upload", () => actions.uploadClipart(f));
               }}
             />
           </div>
