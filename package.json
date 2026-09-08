@@ -9,17 +9,21 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "gen:fonts": "tsx scripts/gen-font-css.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "1.0.8",
+    "konva": "^10.3.3",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-konva": "^19.2.6",
     "sharp": "0.35.4",
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pixelmatch": "^5.2.6",

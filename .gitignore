@@ -45,3 +45,7 @@ tests/engine/__golden__/*.diff.png
 
 # superpowers
 .superpowers/
+
+# playwright
+/test-results/
+/playwright-report/
