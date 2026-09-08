@@ -10,8 +10,10 @@ test.describe(() => {
   test.skip(!process.env.DATABASE_URL, "DATABASE_URL is not set");
 
   test("creates a set, uploads a clipart, edits it and exports a zip", async ({ page }) => {
-    // Export renders a print PNG plus a mockup per member; that is minutes, not seconds.
-    test.setTimeout(300_000);
+    // Export renders a print PNG plus a mockup per member. A four-member set measures ~1.3 s, so
+    // the budget below is slack for a cold server, not an expectation — it has to stay tight
+    // enough that a real regression trips it.
+    test.setTimeout(120_000);
 
     // The draft is created by a POST from the home page, never by opening a URL.
     await page.goto("/");
@@ -31,7 +33,7 @@ test.describe(() => {
 
     await page.getByTestId("export").click();
     const zip = page.getByTestId("export-link");
-    await expect(zip).toBeVisible({ timeout: 240_000 });
+    await expect(zip).toBeVisible({ timeout: 60_000 });
     expect(await zip.getAttribute("href")).toMatch(/\.zip$/);
   });
 });
