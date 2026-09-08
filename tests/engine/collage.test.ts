@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { collage } from "@/engine/templates/collage";
+import { collage, NUMERAL_START_FRACTION } from "@/engine/templates/collage";
 import { createNodeMeasurer } from "@/engine/measure";
-import { isWithinSafeArea, boundingBoxCm, layerBounds, maxCm, canvasFor } from "@/engine/sizing";
+import { isWithinSafeArea, boundingBoxCm, layerBounds, maxCm, canvasFor, safeArea } from "@/engine/sizing";
 import { unicornSet, CLIPART_SIZE } from "../fixtures/set-unicorn";
 import type { TextLayer, ImageLayer } from "@/engine/types";
 
@@ -55,6 +55,16 @@ describe("collage template", () => {
           expect(isWithinSafeArea(d), `${lang}/${variant.name}/${m.label}`).toBe(true);
           expect(boundingBoxCm(d).longest, `${lang}/${variant.name}/${m.label}`).toBeLessThanOrEqual(maxCm(m.sizeClass));
 
+          // Every text slot keeps real slack below it: the clamp stops short of the safe bottom,
+          // so a downstream nudge cannot tip the design over the export limit.
+          const A = safeArea(d.canvas);
+          for (const l of d.layers) {
+            if (l.type !== "text") continue;
+            const b = layerBounds(l);
+            expect(b.y + b.h, `${lang}/${variant.name}/${m.label}: ${l.id} bottom slack`)
+              .toBeLessThanOrEqual(A.y + A.h - 0.004 * d.canvas.w);
+          }
+
           // The clipart is allowed to overlap the numeral (they are composed as one unit), but no
           // other text slot may collide with it, ink allowance included.
           const c = layerBounds(image(d, "clipart"));
@@ -98,7 +108,7 @@ describe("collage template", () => {
 
     const d5 = collage(set, set.input.members[0], ctx);
     const n5 = text(d5, "numeral");
-    expect(n5.size).toBe(0.54 * canvasFor("adult").w);
+    expect(n5.size).toBe(NUMERAL_START_FRACTION * canvasFor("adult").w);
   });
 
   it("indonesian moves ordinal before the numeral", () => {

@@ -9,7 +9,9 @@ export type TemplateContext = { measure: TextMeasurer; clipart: { w: number; h: 
 const MIN_SIZE_FRACTION = 0.04;
 // The numeral is the tallest element, so its start size sets the bottom slack: under the ink model
 // its box runs 1.27 * size below `numeralY` (1.25 descender allowance + both stroke halves).
-const NUMERAL_START_FRACTION = 0.54;
+export const NUMERAL_START_FRACTION = 0.54;
+/** Slack the bottom clamp keeps between a text layer's ink bottom and the safe-area bottom. */
+const CLAMP_MARGIN_FRACTION = 0.005;
 
 export function collage(set: Set, member: Member, ctx: TemplateContext): Design {
   const canvas = canvasFor(member.sizeClass);
@@ -66,10 +68,13 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
   const bottom = fitted("bottom", lines.bottom, A.x, 0.80 * S, A.w, 0.14 * S, "center");
 
   // `y` is the top of the text box (the renderer draws with textBaseline "top"), so clamp the box
-  // top upwards for any layer whose box would otherwise run past the safe bottom.
+  // top upwards for any layer whose box would otherwise run past the safe bottom. Clamp to half a
+  // percent inside that edge rather than onto it: landing exactly on the boundary leaves the slot
+  // with zero slack, and any later nudge would push `exportPrintPng` into an ExportError.
+  const clampBottom = A.y + A.h - CLAMP_MARGIN_FRACTION * S;
   for (const t of [top, ordinal, occasion, bottom]) {
     const b = layerBounds(t);
-    if (b.y + b.h > A.y + A.h) t.y -= (b.y + b.h) - (A.y + A.h);
+    if (b.y + b.h > clampBottom) t.y -= (b.y + b.h) - clampBottom;
   }
 
   return { version: 2, sizeClass: member.sizeClass, canvas, shirtColor: set.input.shirtColor,
