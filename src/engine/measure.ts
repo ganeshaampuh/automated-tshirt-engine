@@ -10,7 +10,13 @@ export function ensureNodeFonts() {
   if (fontsRegistered) return;
   registerFonts((file, family) => {
     const ok = GlobalFonts.registerFromPath(file, family);
-    if (!ok) throw new Error(`Failed to register font "${family}" from ${file}`);
+    if (!ok) {
+      throw new Error(
+        `Failed to register font "${family}" from ${file} — the font file is missing or unreadable. ` +
+        `On a serverless deploy this usually means the asset was not traced into the bundle; ` +
+        `check outputFileTracingIncludes covers ./public/fonts/**/*.`,
+      );
+    }
   });
   fontsRegistered = true;
 }
