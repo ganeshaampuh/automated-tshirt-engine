@@ -13,8 +13,10 @@ export const dynamic = "force-dynamic";
 /**
  * The whole ZIP is one upload, so unlike the tick this cannot be split across invocations: a
  * half-written stream cannot be resumed by a second function. 300 s is Vercel's ceiling for a
- * function on every plan, and a measured set costs a little over a second, so this covers the 200
- * sets the parser allows with room to spare. See the task report for the measurement.
+ * function on every plan, and a set costs roughly two seconds, so this does *not* reach the 200 sets
+ * the parser allows — well over a hundred is where the ceiling lands. That is why the loop below
+ * stops taking new sets at `deadline` and marks the ZIP truncated rather than being killed
+ * mid-stream; the README's "Known limitations" carries the same figure.
  */
 // Next.js reads this without running the file, so it has to be a literal; `TICK_MAX_SECONDS` in
 // `processSet.ts` is the value it must equal, and `tests/app/gallery.test.ts` fails if it drifts.
@@ -56,8 +58,9 @@ const TRUNCATED = "Waktu ekspor habis sebelum semua set masuk. ZIP ini belum len
 
 /**
  * The moment the export must stop taking on new sets: the function's own budget, less a margin for
- * closing the ZIP and finishing the upload. Measured locally at about two seconds a set, so this
- * covers well over a hundred sets — see the task report for where the ceiling actually lands.
+ * closing the ZIP and finishing the upload. At roughly two seconds a set that covers well over a
+ * hundred sets, short of the 200 the parser allows; anything past the deadline is left out and
+ * named in `report.csv`.
  */
 const CLOSING_MARGIN_MS = 45_000;
 

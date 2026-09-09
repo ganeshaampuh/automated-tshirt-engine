@@ -30,9 +30,11 @@ export function claimableSets(batchId: string, limit: number): SQL {
  * only ever takes `queued` ones. The batch can then never reach `ready` and the gallery would poll
  * a batch that has no live work. `resumeBatchAction` puts such rows back in the queue.
  *
- * The age cut is what keeps this safe: a legitimate tick has at most `maxDuration` (60 s) to live,
- * so at five minutes there is no tick left that could still be working on the row. Anything younger
- * is left alone rather than raced.
+ * The age cut is what keeps this safe: a legitimate tick has at most `maxDuration` (300 s, the value
+ * of `TICK_MAX_SECONDS`) to live, so at ten minutes — `STALE_CLAIM_MINUTES`, twice that budget —
+ * there is no tick left that could still be working on the row. Anything younger is left alone
+ * rather than raced, because requeueing a set a live tick is still drawing renders, stores and bills
+ * it twice.
  */
 export function strandedSets(batchId: string, staleMinutes: number): SQL {
   return sql`${sets.batchId} = ${batchId} and ${sets.status} = 'processing'
