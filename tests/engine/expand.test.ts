@@ -47,3 +47,41 @@ describe("expand", () => {
     expect(() => expand(s, ctx)).toThrow();
   });
 });
+
+describe("applyOrder", () => {
+  const stack = (s = unicornSet()) => expand(s, ctx)[0].design.layers.map(l => l.id);
+
+  it("leaves the template order alone when a member has no order of its own", () => {
+    expect(stack()).toEqual(["numeral", "clipart", "top", "ordinal", "occasion", "bottom"]);
+  });
+
+  it("draws the layers in the member's stored order", () => {
+    const s = unicornSet();
+    const order = ["clipart", "numeral", "top", "ordinal", "occasion", "bottom"];
+    s.input.members[0].order = order;
+    expect(stack(s)).toEqual(order);
+    // …and only for that member.
+    expect(expand(s, ctx)[1].design.layers.map(l => l.id)).toEqual(stack());
+  });
+
+  it("keeps the overrides working on a reordered stack", () => {
+    const s = unicornSet();
+    s.input.members[0].order = ["clipart", "numeral", "top", "ordinal", "occasion", "bottom"];
+    s.input.members[0].overrides = { clipart: { x: 123 } };
+    const d = expand(s, ctx)[0].design;
+    expect(d.layers[0]).toMatchObject({ id: "clipart", x: 123 });
+  });
+
+  it("ignores an order that does not name exactly the layers the template drew", () => {
+    const s = unicornSet();
+    // A stale order — the template has six layers, this names five.
+    s.input.members[0].order = ["clipart", "numeral", "top", "ordinal", "occasion"];
+    expect(stack(s)).toEqual(stack());
+  });
+
+  it("ignores an order naming a layer the template never drew", () => {
+    const s = unicornSet();
+    s.input.members[0].order = ["nope", "clipart", "numeral", "top", "ordinal", "occasion", "bottom"];
+    expect(stack(s)).toEqual(stack());
+  });
+});
