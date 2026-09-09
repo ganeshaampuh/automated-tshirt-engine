@@ -3,7 +3,7 @@
 import type { Member, SizeClass } from "@/engine";
 import type { Action } from "../useSetEditor";
 import { QUICK_MEMBERS, SIZE_CLASSES, SIZE_LABEL, newMemberId } from "./labels";
-import { Button } from "./ui";
+import { Button } from "@/app/components/ui";
 
 export function MembersList({
   members,

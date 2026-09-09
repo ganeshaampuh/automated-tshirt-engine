@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { maxCm, type Design } from "@/engine";
 import type { LayerPatch, Scope } from "../useSetEditor";
-import { Button } from "./ui";
+import { Button } from "@/app/components/ui";
 
 // react-konva touches `window` at import time, so it must never run on the server.
 const DesignStage = dynamic(() => import("@/engine/render/browser/DesignStage").then(m => m.DesignStage), { ssr: false });
