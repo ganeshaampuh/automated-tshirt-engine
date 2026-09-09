@@ -13,6 +13,7 @@ const COLUMNS: { name: string; required: boolean; note: string }[] = [
   { name: "language", required: false, note: "id atau en. Kosong berarti id." },
   { name: "shirt_color", required: false, note: `Kode heks (#ffffff) atau nama warna: ${SHIRT_COLORS.map(c => c.name.toLowerCase()).join(", ")}.` },
   { name: "clipart_url", required: false, note: "URL https atau data:image. Kosong berarti gambar dibuat otomatis." },
+  { name: "sku_prefix", required: false, note: "Nama folder set ini di dalam ZIP, misal “KEI”. Kosong berarti nama anak, yang bisa sama untuk dua keluarga." },
 ];
 
 export default function NewBatchPage() {
@@ -47,9 +48,9 @@ export default function NewBatchPage() {
           ))}
         </dl>
         <pre className="mt-4 overflow-x-auto border border-rule bg-panel px-3 py-2 font-mono text-[12px] leading-relaxed text-muted">
-{`kid_name,age,theme,members,language,shirt_color
-Keisya,5,unicorn pastel,Ayah:adult;Mama:adult;Keisya:kid,id,#ffffff
-Bima,1,dinosaurus,"Ayah:adult;Bunda:adult;Bima:kid",id,navy`}
+{`kid_name,age,theme,members,language,shirt_color,sku_prefix
+Keisya,5,unicorn pastel,Ayah:adult;Mama:adult;Keisya:kid,id,#ffffff,KEI
+Bima,1,dinosaurus,"Ayah:adult;Bunda:adult;Bima:kid",id,navy,BIM`}
         </pre>
       </section>
     </div>
