@@ -10,7 +10,7 @@ import { db, schema } from "@/db";
 import { clipartPatch } from "@/db/clipart";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { putBlob } from "@/lib/blob";
-import { clipartSize, exportSetZip } from "@/lib/sets";
+import { clipartSize, exportSetZip, newByteCache } from "@/lib/sets";
 import { RemoteImageError } from "@/lib/remoteImage";
 import { processClipartUpload } from "@/lib/clipartUpload";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE } from "@/lib/upload";
@@ -180,8 +180,11 @@ export async function exportSetAction(
     if (!style) fail("Buat gayanya dulu sebelum export.");
     let zipUrl: string, sizes: Record<string, { widthCm: number; heightCm: number }>;
     try {
-      const size = await clipartSize(style.clipartSrc);
-      const out = await exportSetZip({ input, style }, { measure: createNodeMeasurer(), clipartSize: size, loadImage: loadImageFromFile });
+      // One cache for the whole export: the clipart is wanted once for its size and then twice per
+      // member, and a remote src must not be fetched nine times.
+      const cache = newByteCache();
+      const size = await clipartSize(style.clipartSrc, cache);
+      const out = await exportSetZip({ input, style }, { measure: createNodeMeasurer(), clipartSize: size, loadImage: loadImageFromFile, cache });
       sizes = out.sizes;
       zipUrl = await putBlob(`exports/${id}-${Date.now()}.zip`, out.zip, "application/zip");
     } catch (e) {

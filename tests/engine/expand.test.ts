@@ -31,4 +31,19 @@ describe("expand", () => {
     expect(() => applyOverrides(d, { clipart: { w: -1 } })).toThrow();
     expect(() => applyOverrides(d, { bottom: { color: "red" } })).toThrow();
   });
+
+  it("refuses an override that points a layer at a file on the server", () => {
+    const d = expand(unicornSet(), ctx)[0].design;
+    for (const src of ["/etc/passwd", "../../etc/passwd", "tests/fixtures/../../etc/passwd", "file:///etc/passwd", "http://169.254.169.254/latest/meta-data"])
+      expect(() => applyOverrides(d, { clipart: { src } }), src).toThrow();
+    // the shapes the app itself produces still pass
+    expect(() => applyOverrides(d, { clipart: { src: "https://blob.example/a.png" } })).not.toThrow();
+    expect(() => applyOverrides(d, { clipart: { src: "tests/fixtures/unicorn.png" } })).not.toThrow();
+  });
+
+  it("refuses the same override when it arrives through expand, on any member", () => {
+    const s = unicornSet();
+    s.input.members[2].overrides = { clipart: { src: "/etc/passwd" } };
+    expect(() => expand(s, ctx)).toThrow();
+  });
 });

@@ -12,10 +12,10 @@ describe("isBlockedAddress", () => {
       expect(isBlockedAddress(ip), ip).toBe(true);
   });
   it("allows ordinary public addresses", () => {
-    for (const ip of ["93.184.216.34", "1.1.1.1", "2606:4700::1111"]) expect(isBlockedAddress(ip), ip).toBe(false);
+    for (const ip of ["93.184.216.34", "1.1.1.1", "2606:4700::1111", "2002:5db8:d822::1", "::ffff:0:5db8:d822"]) expect(isBlockedAddress(ip), ip).toBe(false);
   });
   it("blocks an IPv4-mapped address written in hex, and other reserved space", () => {
-    for (const ip of ["::ffff:7f00:1", "::ffff:a00:5", "::", "ff02::1", "240.0.0.1", "198.18.0.1", "192.0.0.1", "255.255.255.255", "64:ff9b::7f00:1"])
+    for (const ip of ["::ffff:7f00:1", "::ffff:a00:5", "::", "ff02::1", "240.0.0.1", "198.18.0.1", "192.0.0.1", "255.255.255.255", "64:ff9b::7f00:1", "2002:7f00:1::", "2002:a00:5::1", "::ffff:0:7f00:1"])
       expect(isBlockedAddress(ip), ip).toBe(true);
   });
   it("blocks anything it cannot parse as an address", () => {
@@ -123,9 +123,15 @@ describe("fetchRemoteImage", () => {
 
 describe("assertPublicHost", () => {
   it("names the host it refused without leaking the address", () => {
-    try { assertPublicHost("internal.test", ["10.0.0.1"]); } catch (e) {
-      expect((e as Error).message).toContain("internal.test");
-      expect((e as Error).message).not.toContain("10.0.0.1");
-    }
+    expect(() => assertPublicHost("internal.test", ["10.0.0.1"])).toThrow(RemoteImageError);
+    const message = (() => { try { assertPublicHost("internal.test", ["10.0.0.1"]); return ""; } catch (e) { return (e as Error).message; } })();
+    expect(message).toContain("internal.test");
+    expect(message).not.toContain("10.0.0.1");
+  });
+  it("refuses a host with no addresses at all", () => {
+    expect(() => assertPublicHost("nowhere.test", [])).toThrow(RemoteImageError);
+  });
+  it("accepts a host whose every answer is public", () => {
+    expect(() => assertPublicHost("cdn.test", ["93.184.216.34", "2606:4700::1111"])).not.toThrow();
   });
 });

@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import type { AIProvider } from "./provider";
 import { fetchBytes } from "@/lib/sets";
+import { MAX_INPUT_PIXELS } from "@/lib/upload";
 import { clipartPrompt, describeSystem } from "./prompts";
 
 export type ClipartMeta = { width: number; height: number; dominantColors: string[]; caption: string; kind: "photo" | "illustration" | "logo" | "pattern" };
@@ -21,7 +22,7 @@ export async function removeWhiteBackground(png: Buffer): Promise<Buffer> {
 }
 
 export async function dominantColors(png: Buffer, n = 5): Promise<string[]> {
-  const { data } = await sharp(png).ensureAlpha().resize(64, 64, { fit: "inside" }).raw().toBuffer({ resolveWithObject: true });
+  const { data } = await sharp(png, { limitInputPixels: MAX_INPUT_PIXELS }).ensureAlpha().resize(64, 64, { fit: "inside" }).raw().toBuffer({ resolveWithObject: true });
   const counts = new Map<string, number>();
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] < 128) continue;
@@ -45,8 +46,13 @@ export async function describeClipart(src: string | Buffer, deps: { provider: AI
   // A string src is a `clipartSrc`, which the shop (and, in batch mode, a spreadsheet) supplies:
   // read it through the same guarded door the exporter uses, never with a bare `fetch`.
   const buf = Buffer.isBuffer(src) ? src : await fetchBytes(src);
-  const { width = 0, height = 0 } = await sharp(buf).metadata();
-  const [colors, small] = await Promise.all([dominantColors(buf), sharp(buf).resize(512, 512, { fit: "inside" }).png().toBuffer()]);
+  // Every decode of these bytes carries the upload pixel ceiling: `src` is attacker-chosen in batch
+  // mode, and 16 MB of PNG can still unpack into gigabytes of raw pixels.
+  const { width = 0, height = 0 } = await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+  const [colors, small] = await Promise.all([
+    dominantColors(buf),
+    sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).resize(512, 512, { fit: "inside" }).png().toBuffer(),
+  ]);
   let caption = "", kind: ClipartMeta["kind"] = "illustration";
   try {
     const r = await deps.provider.chatJSON({ system: describeSystem, user: "Describe this image.", images: [`data:image/png;base64,${small.toString("base64")}`], schema: DescribeSchema });

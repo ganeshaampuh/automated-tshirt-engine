@@ -73,14 +73,15 @@ export function isBlockedAddress(raw: string): boolean {
     if (!h) return true;
     const zeroTop = h.slice(0, 5).every(g => g === 0);
     // An IPv4 address wearing an IPv6 hat — mapped, compatible or NAT64 — is judged as IPv4.
+    const asV4 = (hi: number, lo: number) => [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join(".");
+    // 6to4 carries its IPv4 in the two hextets after the 2002: prefix, not in the last two.
+    if (h[0] === 0x2002) return isBlockedV4(asV4(h[1], h[2]));
     const embedded =
-      (zeroTop && h[5] === 0xffff) ||                       // ::ffff:a.b.c.d
-      (h[0] === 0x0064 && h[1] === 0xff9b && h.slice(2, 6).every(g => g === 0)) || // 64:ff9b::/96
-      (zeroTop && h[5] === 0 && !(h[6] === 0 && h[7] <= 1)); // ::a.b.c.d (but not :: or ::1)
-    if (embedded) {
-      const v4 = [h[6] >> 8, h[6] & 0xff, h[7] >> 8, h[7] & 0xff].join(".");
-      return isBlockedV4(v4);
-    }
+      (zeroTop && h[5] === 0xffff) ||                       // ::ffff:a.b.c.d — IPv4-mapped
+      (h.slice(0, 4).every(g => g === 0) && h[4] === 0xffff && h[5] === 0) || // ::ffff:0:a.b.c.d — IPv4-translated
+      (h[0] === 0x0064 && h[1] === 0xff9b && h.slice(2, 6).every(g => g === 0)) || // 64:ff9b::/96 — NAT64
+      (zeroTop && h[5] === 0 && !(h[6] === 0 && h[7] <= 1)); // ::a.b.c.d — IPv4-compatible (not :: or ::1)
+    if (embedded) return isBlockedV4(asV4(h[6], h[7]));
     if (h.every(g => g === 0)) return true;                        // ::
     if (zeroTop && h[6] === 0 && h[7] === 1) return true;          // ::1
     if ((h[0] & 0xfe00) === 0xfc00) return true;                   // fc00::/7 unique local
@@ -99,8 +100,10 @@ export function assertPublicHost(hostname: string, addresses: string[]): void {
 
 /** `URL.hostname` keeps IPv6 in brackets and may carry a `%25zone`; both are stripped here. */
 function bareHost(hostname: string): string {
-  const inner = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
-  return inner.replace(/%25.*$/i, "").replace(/%.*$/, "");
+  // The zone id is only ever stripped from a bracketed literal: doing it to a registered name would
+  // mean checking one host and fetching another.
+  if (!hostname.startsWith("[") || !hostname.endsWith("]")) return hostname;
+  return hostname.slice(1, -1).replace(/%25.*$/i, "").replace(/%.*$/, "");
 }
 
 /** Resolves the host unless it is already a literal address, then refuses anything non-public. */
