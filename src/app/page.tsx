@@ -47,7 +47,7 @@ export default async function Home() {
       <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-[26px] leading-tight font-medium">Kaos Ulang Tahun</h1>
-          <p className="mt-1 text-[14px] text-muted">Satu set kaos keluarga, siap cetak.</p>
+          <p className="mt-1 text-[14px] text-muted">Nama anak, umur, dan tema jadi desain siap cetak untuk seluruh keluarga.</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -70,7 +70,8 @@ export default async function Home() {
 
       {batchRows.length > 0 && (
         <section className="mb-10">
-          <h2 className="mb-2 font-display text-[13px] text-muted">Batch terakhir</h2>
+          <h2 className="font-display text-[15px]">Batch</h2>
+          <p className="mt-0.5 mb-3 text-[13px] text-muted">Banyak set sekaligus dari satu file CSV.</p>
           <ul className="border-t border-rule">
             {batchRows.map(batch => (
               <li key={batch.id} className="border-b border-rule">
@@ -91,39 +92,43 @@ export default async function Home() {
         </section>
       )}
 
-      {rows.length === 0 ? (
-        <p className="border border-dashed border-rule px-4 py-10 text-center text-[14px] text-muted">
-          Belum ada set. Mulai dari nama anak dan temanya.
-        </p>
-      ) : (
-        <ul className="border-t border-rule">
-          {rows.map(row => {
-            const parsed = SetInputSchema.safeParse(row.input);
-            const input = parsed.success ? parsed.data : null;
-            return (
-              <li key={row.id} className="border-b border-rule">
-                <Link href={`/set/${row.id}`} className="flex items-baseline gap-3 px-1 py-3 transition-colors hover:bg-panel">
-                  {input && (
-                    <span
-                      aria-hidden
-                      className="size-3 self-center rounded-full border border-rule"
-                      style={{ background: input.shirtColor }}
-                    />
-                  )}
-                  <span className="font-display text-[15px]">{input?.kidName ?? "Data rusak"}</span>
-                  {input && (
-                    <span className="text-[13px] text-muted">
-                      {input.age} tahun, {input.members.length} kaos
-                    </span>
-                  )}
-                  <span className="ml-auto text-[12px] text-muted">{statusLabel(row.status)}</span>
-                  <span className="w-[104px] text-right font-mono text-[12px] text-muted tabular-nums">{when(row.updatedAt)}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <section>
+        <h2 className="font-display text-[15px]">Set</h2>
+        <p className="mt-0.5 mb-3 text-[13px] text-muted">Satu ulang tahun, satu desain per anggota keluarga.</p>
+        {rows.length === 0 ? (
+          <p className="border border-dashed border-rule px-4 py-10 text-center text-[14px] text-muted">
+            Belum ada set. Mulai dari nama anak dan temanya.
+          </p>
+        ) : (
+          <ul className="border-t border-rule">
+            {rows.map(row => {
+              const parsed = SetInputSchema.safeParse(row.input);
+              const input = parsed.success ? parsed.data : null;
+              return (
+                <li key={row.id} className="border-b border-rule">
+                  <Link href={`/set/${row.id}`} className="flex items-baseline gap-3 px-1 py-3 transition-colors hover:bg-panel">
+                    {input && (
+                      <span
+                        aria-hidden
+                        className="size-3 self-center rounded-full border border-rule"
+                        style={{ background: input.shirtColor }}
+                      />
+                    )}
+                    <span className="font-display text-[15px]">{input?.kidName ?? "Data rusak"}</span>
+                    {input && (
+                      <span className="text-[13px] text-muted">
+                        {input.age} tahun, {input.members.length} kaos
+                      </span>
+                    )}
+                    <span className="ml-auto text-[12px] text-muted">{statusLabel(row.status)}</span>
+                    <span className="w-[104px] text-right font-mono text-[12px] text-muted tabular-nums">{when(row.updatedAt)}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
