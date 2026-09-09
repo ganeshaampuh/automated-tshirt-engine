@@ -13,6 +13,7 @@ export function StatusBar({
   name,
   counts,
   batchStatus,
+  notice,
   stuck,
   resuming,
   onResume,
@@ -20,6 +21,8 @@ export function StatusBar({
   name: string;
   counts: GalleryCounts;
   batchStatus: string;
+  /** What the batch row has to say for itself — an export that came out short, or came out with holes. */
+  notice: string | null;
   stuck: boolean;
   resuming: boolean;
   onResume: () => void;
@@ -45,6 +48,13 @@ export function StatusBar({
             <span aria-hidden className="size-3 animate-spin rounded-full border-2 border-mat border-t-transparent" />
             {counts.processing > 0 ? "Sedang menggambar…" : "Menunggu giliran…"}
           </span>
+        )}
+        {/* The batch's own sentence. Without it the only account of a short or holed export lives
+            inside report.csv, which nobody opens unless they already suspect something. */}
+        {notice !== null && notice !== "" && (
+          <p data-testid="batch-notice" className="text-[13px] text-alert">
+            {notice}
+          </p>
         )}
         {stuck && (
           <p data-testid="stuck" className="text-[13px] text-alert">

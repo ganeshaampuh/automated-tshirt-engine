@@ -47,23 +47,26 @@ export function GalleryActions({
         <Button variant="primary" data-testid="approve-selected" disabled={selected === 0} pending={pending} onClick={onApprove}>
           Setujui terpilih
         </Button>
-        {/* The ZIP is only worth offering once something is in it, and once it exists the same slot
-            becomes the file itself rather than a second button that would start the render again. */}
-        {approvedCount > 0 &&
-          (zipUrl && !exporting ? (
-            <a
-              href={zipUrl}
-              download
-              data-testid="download-zip"
-              className="inline-flex items-center rounded-md border border-rule px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-panel"
-            >
-              Unduh ZIP ({approvedCount} set)
-            </a>
-          ) : (
-            <Button data-testid="export-zip" pending={exporting} disabled={exporting} onClick={onExport}>
-              {exporting ? "Menyiapkan ZIP…" : "Buat ZIP"}
-            </Button>
-          ))}
+        {/* The ZIP is only worth offering once something is in it. The link says nothing about how
+            many sets are inside — a truncated export would otherwise be labelled with the number of
+            sets the shop approved rather than the number the file actually holds — and a ZIP that
+            existing ZIP never replaces the button: an export that came out short, and a set approved
+            after the file was written, both need a second run, and neither can be had from a link. */}
+        {approvedCount > 0 && zipUrl !== null && !exporting && (
+          <a
+            href={zipUrl}
+            download
+            data-testid="download-zip"
+            className="inline-flex items-center rounded-md border border-rule px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-panel"
+          >
+            Unduh ZIP
+          </a>
+        )}
+        {approvedCount > 0 && (
+          <Button data-testid="export-zip" pending={exporting} disabled={exporting} onClick={onExport}>
+            {exporting ? "Menyiapkan ZIP…" : zipUrl === null ? "Buat ZIP" : "Buat ulang ZIP"}
+          </Button>
+        )}
       </div>
     </div>
   );

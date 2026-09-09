@@ -175,6 +175,7 @@ describe("tick budget", () => {
   // constant; this is what keeps the copy honest.
   it.each(["tick", "export"])("holds the %s route's maxDuration to that same budget", route => {
     const src = readFileSync(`src/app/api/batch/[id]/${route}/route.ts`, "utf8");
-    expect(src).toContain(`export const maxDuration = ${TICK_MAX_SECONDS};`);
+    // Anchored to the start of a line: a commented-out or shadowed copy must not satisfy the pin.
+    expect(src).toMatch(new RegExp(`^export const maxDuration = ${TICK_MAX_SECONDS};$`, "m"));
   });
 });

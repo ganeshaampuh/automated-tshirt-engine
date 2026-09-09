@@ -27,9 +27,9 @@ const reason = (e: unknown, fallback: string) => (e instanceof RemoteImageError 
 /**
  * The folder a set's PNGs go in: its `sku_prefix` when the row carries one, else the kid's name.
  *
- * `SetInputSchema` has no `sku_prefix` field yet, so today every folder is named from the kid; the
- * column is read off the stored JSON directly so that wiring it through the parser is the only
- * change needed, not a second pass over the export.
+ * Read off the stored JSON rather than the parsed input on purpose: `SetInputSchema` strips what it
+ * does not declare, so a set written before `skuPrefix` was a field would silently lose its folder
+ * name on the way through the parse.
  */
 function folderFor(input: SetInput): string {
   const raw = (input as SetInput & { skuPrefix?: unknown }).skuPrefix;
@@ -43,6 +43,25 @@ function uniqueFolder(base: string, taken: Map<string, number>): string {
   taken.set(base, n);
   return n === 1 ? base : `${base}-${n}`;
 }
+
+/**
+ * Whichever comes first: the promise, or the deadline. The timer is always cleared, so a resolved
+ * race cannot hold the process open after the export has answered.
+ */
+function race<T>(promise: Promise<T>, deadline: number): Promise<T | "timeout"> {
+  let timer: ReturnType<typeof setTimeout>;
+  const late = new Promise<"timeout">(resolve => {
+    timer = setTimeout(() => resolve("timeout"), Math.max(0, deadline - Date.now()));
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * How long the finished upload is given after the deadline. `put` resolves once the last chunk is
+ * acknowledged, so a stalled connection would otherwise hold the export past its budget and the
+ * batch would be killed still marked `exporting`, with nothing said about why.
+ */
+const UPLOAD_GRACE_MS = 30_000;
 
 const csvCell = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 const csvRow = (cells: string[]) => cells.map(csvCell).join(",") + "\n";
@@ -97,13 +116,20 @@ function zipStream() {
       entry.push(data, true);
     },
     end: () => zip.end(),
-    /** Resolves once the consumer wants more bytes, so only one set is ever in flight. */
-    async drain() {
+    /**
+     * Waits until the consumer wants more bytes, so only one set is ever in flight — but never past
+     * the deadline. An upload that stalls would otherwise park here for the whole budget and the
+     * function would be killed with nothing written: the timeout is what makes "a valid ZIP, or a
+     * recorded failure" unconditional rather than a hope about the network.
+     */
+    async drain(deadline?: number): Promise<"ok" | "timeout"> {
       if (failure) throw failure;
       const room = controller.desiredSize;
-      if (room === null || room > 0) return;
-      await new Promise<void>(resolve => (wake = resolve));
+      if (room === null || room > 0) return "ok";
+      const parked = new Promise<"ok">(resolve => (wake = () => resolve("ok")));
+      const outcome = deadline === undefined ? await parked : await race(parked, deadline);
       if (failure) throw failure;
+      return outcome;
     },
   };
 }
@@ -132,6 +158,10 @@ export async function streamBatchZip(opts: {
   let report = csvRow(["set_id", "folder", "kid_name", "member", "status", "error"]);
   let files = 0;
   let truncated = false;
+  const stop = () => {
+    truncated = true;
+    report += csvRow(["", "", "", "", "truncated", "Batas waktu ekspor tercapai; sisa set belum masuk ZIP."]);
+  };
 
   // Started before anything is rendered: the upload has to be pulling for the stream to move.
   const uploaded = put(`batches/${batchId}.zip`, zip.stream, "application/zip");
@@ -149,11 +179,14 @@ export async function streamBatchZip(opts: {
       // Stopping one set short of the budget instead means the shop gets a valid file plus a report
       // line naming what is missing.
       if (deadline !== undefined && Date.now() >= deadline) {
-        truncated = true;
-        report += csvRow(["", "", "", "", "truncated", "Batas waktu ekspor tercapai; sisa set belum masuk ZIP."]);
+        stop();
         break;
       }
-      await zip.drain();
+      // A stalled upload counts as the deadline arriving: park no longer than the budget allows.
+      if ((await zip.drain(deadline)) === "timeout") {
+        stop();
+        break;
+      }
       const parsed = SetSchema.safeParse({ input: row.input, style: row.style });
       if (!parsed.success) {
         failures.push({ set: row.id, error: SET_UNRENDERED });
@@ -192,8 +225,12 @@ export async function streamBatchZip(opts: {
           failures.push({ set: row.id, member: member.label, error });
           note(row, folder, member.label, "failed", error);
         }
-        await zip.drain();
+        if ((await zip.drain(deadline)) === "timeout") {
+          stop();
+          break;
+        }
       }
+      if (truncated) break;
     }
 
     zip.file("report.csv", strToU8(report));
@@ -204,7 +241,9 @@ export async function streamBatchZip(opts: {
     throw e;
   }
 
-  return { url: await uploaded, files, failures, truncated };
+  const url = deadline === undefined ? await uploaded : await race(uploaded, deadline + UPLOAD_GRACE_MS);
+  if (url === "timeout") throw new Error("Blob upload did not finish before the export's deadline");
+  return { url, files, failures, truncated };
 }
 
 /** One member's print-ready PNG, transparent and already cropped to its safe printed size. */

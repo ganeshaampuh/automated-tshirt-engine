@@ -89,6 +89,22 @@ describe("parseBatchRows", () => {
     expect(parseBatchRows(many).errors[0].message).toMatch(new RegExp(String(MAX_SETS)));
   });
 
+  it("carries sku_prefix through to the input, because the export names the folder with it", () => {
+    const { rows, errors } = parseBatchRows("kid_name,age,theme,members,sku_prefix\nK,5,u,A:adult;K:kid, KEI \n");
+    expect(errors).toEqual([]);
+    expect(rows[0].input.skuPrefix).toBe("KEI");
+    // The schema has to declare it, or it would be stripped back out on the way into the database.
+    expect(SetInputSchema.parse(rows[0].input).skuPrefix).toBe("KEI");
+  });
+
+  it("leaves skuPrefix off a row that has no sku_prefix, or an empty one", () => {
+    for (const csv of ["kid_name,age,theme,members\nK,5,u,A:adult;K:kid\n", "kid_name,age,theme,members,sku_prefix\nK,5,u,A:adult;K:kid,  \n"]) {
+      const { rows, errors } = parseBatchRows(csv);
+      expect(errors).toEqual([]);
+      expect(rows[0].input).not.toHaveProperty("skuPrefix");
+    }
+  });
+
   it("refuses a row whose clipart_url is not https", () => {
     const row = "kid_name,age,theme,members,clipart_url\nK,5,u,A:adult;K:kid,http://x/y.png\n";
     expect(parseBatchRows(row).errors[0].message).toMatch(/https/i);

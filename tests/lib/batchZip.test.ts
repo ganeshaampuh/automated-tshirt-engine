@@ -6,6 +6,7 @@ import { clipartSize } from "@/lib/sets";
 import { fetchRemoteImage } from "@/lib/remoteImage";
 import { createNodeMeasurer, loadImageFromFile } from "@/engine/server";
 import type { SetRow } from "@/db/schema";
+import { parseBatchRows } from "@/lib/csv";
 import { unicornSet } from "../fixtures/set-unicorn";
 
 // No test may reach the network: the broken set below names a remote clipart on purpose.
@@ -73,8 +74,9 @@ async function* iterate(rows: SetRow[]) {
 describe("streamBatchZip", () => {
   it("writes one folder per set, a PNG per member within its size limit, and a report", async () => {
     const rows = [
-      // Named by its sku prefix when the row carries one.
-      setRow({ id: "s1", input: { ...setRow({ id: "x" }).input, skuPrefix: "KEI" } as SetRow["input"] }),
+      // Named by its sku prefix when the row carries one — parsed from a real CSV line, so this
+      // fails if the column stops being carried through `csv.ts` or the schema strips it again.
+      setRow({ id: "s1", input: { ...parseBatchRows("kid_name,age,theme,members,sku_prefix\nKeisya,5,unicorn,Ayah:adult;Keisya:kid,KEI\n").rows[0].input, members: setRow({ id: "x" }).input.members } }),
       // No prefix: named from the kid, and it collides with the third set.
       setRow({ id: "s2" }),
       setRow({ id: "s3" }),
@@ -143,6 +145,19 @@ describe("streamBatchZip", () => {
     expect(out.files).toBe(0);
     const report = strFromU8(unzipSync(new Uint8Array(buffer()))["report.csv"]);
     expect(report).toContain("truncated");
+  }, 60_000);
+
+  it("does not park forever on an upload that stopped reading", async () => {
+    // A consumer that never pulls: without a deadline inside `drain` the export would sit here for
+    // the whole budget and be killed with nothing written.
+    const put = vi.fn(async () => "https://blob.test/stalled.zip");
+    const rows = [setRow({ id: "p1" }), setRow({ id: "p2" }), setRow({ id: "p3" })];
+    const started = Date.now();
+    const out = await streamBatchZip({ batchId: "b5", sets: iterate(rows), deps: deps(), put, deadline: Date.now() + 500 });
+    expect(out.truncated).toBe(true);
+    expect(out.url).toBe("https://blob.test/stalled.zip");
+    // It gave up near its deadline rather than rendering every set into a stream nobody is reading.
+    expect(Date.now() - started).toBeLessThan(20_000);
   }, 60_000);
 
   it("escapes a comma and a quote in the report rather than shifting its columns", async () => {

@@ -151,6 +151,9 @@ function buildInput(get: (col: string) => string): SetInput {
     throw new Error(`Kolom clipart_url harus berupa URL https atau data:image, bukan "${clipart}".`);
   }
 
+  // Optional: without it the export names the folder after the kid, which two families can share.
+  const skuPrefix = get("sku_prefix").trim();
+
   const input: SetInput = {
     kidName,
     age,
@@ -159,6 +162,7 @@ function buildInput(get: (col: string) => string): SetInput {
     language,
     members,
     ...(clipart === "" ? {} : { clipartSrc: clipart }),
+    ...(skuPrefix === "" ? {} : { skuPrefix }),
   };
 
   const parsed = SetInputSchema.safeParse(input);

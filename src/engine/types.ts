@@ -74,6 +74,9 @@ export type Member = z.infer<typeof MemberSchema>;
 export const SetInputSchema = z.object({
   kidName: z.string().min(1), age: z.number().int().min(0).max(120), theme: z.string().min(1),
   clipartSrc: ClipartSrc.optional(), shirtColor: Hex, language: LanguageSchema,
+  // The shop's own order code for this set. It names the set's folder in the batch export (spec
+  // §8.2), so it is capped short enough to stay a sane directory name.
+  skuPrefix: z.string().min(1).max(40).optional(),
   members: z.array(MemberSchema).min(1),
 }).refine(s => s.members.filter(m => m.kind === "birthday-kid").length === 1, { message: "exactly one birthday-kid member" });
 export type SetInput = z.infer<typeof SetInputSchema>;

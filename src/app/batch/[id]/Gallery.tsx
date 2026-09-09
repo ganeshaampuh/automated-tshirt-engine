@@ -33,7 +33,14 @@ const POLL_MS = 3000;
  */
 const STUCK_MS = 10 * 60 * 1000;
 
-type BoardProps = { batchId: string; name: string; batchStatus: string; zipUrl: string | null; sets: GallerySet[] };
+type BoardProps = {
+  batchId: string;
+  name: string;
+  batchStatus: string;
+  zipUrl: string | null;
+  batchError: string | null;
+  sets: GallerySet[];
+};
 
 export default function Gallery(props: BoardProps) {
   return (
@@ -43,7 +50,7 @@ export default function Gallery(props: BoardProps) {
   );
 }
 
-function Board({ batchId, name, batchStatus, zipUrl, sets }: BoardProps) {
+function Board({ batchId, name, batchStatus, zipUrl, batchError, sets }: BoardProps) {
   const router = useRouter();
   const { show } = useToast();
   const { pending, run } = useAction();
@@ -57,7 +64,7 @@ function Board({ batchId, name, batchStatus, zipUrl, sets }: BoardProps) {
   const [stuck, setStuck] = useState(false);
 
   // When the last render showed something different from the one before it, work is alive.
-  const signature = useMemo(() => `${batchStatus}:${zipUrl ?? ""}|${statusSignature(sets)}`, [batchStatus, zipUrl, sets]);
+  const signature = useMemo(() => `${batchStatus}:${zipUrl ?? ""}:${batchError ?? ""}|${statusSignature(sets)}`, [batchStatus, zipUrl, batchError, sets]);
   // `at: 0` means "not stamped yet": the clock is read in the effect below, never during a render.
   const lastChange = useRef({ signature, at: 0 });
   useEffect(() => {
@@ -99,6 +106,7 @@ function Board({ batchId, name, batchStatus, zipUrl, sets }: BoardProps) {
         name={name}
         counts={counts}
         batchStatus={batchStatus}
+        notice={batchError}
         stuck={stuck}
         resuming={pending === "resume"}
         onResume={() =>
