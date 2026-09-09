@@ -5,9 +5,15 @@ import { config } from "dotenv";
 // database is available at all.
 config({ path: ".env.local", quiet: true });
 
-// The editor reads and writes real rows, so it needs a database. A bare checkout has none.
+// The editor reads and writes real rows, so it needs a database. A bare checkout has none. It also
+// writes them into whatever database `DATABASE_URL` points at, which today is the same one
+// production uses, so a database is necessary but not sufficient: `ALLOW_DB_TESTS=1` has to be set
+// too. See the same guard in `batch.spec.ts`.
+const allowed = ["1", "true"].includes((process.env.ALLOW_DB_TESTS ?? "").toLowerCase());
+
 test.describe(() => {
   test.skip(!process.env.DATABASE_URL, "DATABASE_URL is not set");
+  test.skip(!allowed, "ALLOW_DB_TESTS is not set; this spec writes real sets, previews and ZIPs");
 
   test("creates a set, uploads a clipart, edits it and exports a zip", async ({ page }) => {
     // Export renders a print PNG plus a mockup per member. A four-member set measures ~1.3 s, so
