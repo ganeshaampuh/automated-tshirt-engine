@@ -5,6 +5,8 @@ import { strandedSets } from "@/db/claimSets";
 import { STALE_CLAIM_MINUTES, TICK_MAX_SECONDS } from "@/lib/processSet";
 import {
   approvable,
+  batchDeletable,
+  deletable,
   EXPORT_STALE_MS,
   exportRetryable,
   galleryCounts,
@@ -209,5 +211,56 @@ describe("tick budget", () => {
     const src = readFileSync(`src/app/api/batch/[id]/${route}/route.ts`, "utf8");
     // Anchored to the start of a line: a commented-out or shadowed copy must not satisfy the pin.
     expect(src).toMatch(new RegExp(`^export const maxDuration = ${TICK_MAX_SECONDS};$`, "m"));
+  });
+});
+
+/**
+ * Deletion is the one verdict that cannot be undone, so its rule is the strictest one here: a set a
+ * tick may still be holding is never removed, and an id the caller cannot see is never guessed at.
+ */
+describe("deletable", () => {
+  it("keeps every settled set, whatever verdict it carries", () => {
+    const settled = rows("ready", "approved", "rejected", "failed");
+    expect(deletable(settled.map(r => r.id), settled)).toEqual(["s1", "s2", "s3", "s4"]);
+  });
+
+  it("refuses a set a tick may still be holding", () => {
+    const mixed = rows("queued", "processing", "ready");
+    expect(deletable(["s1", "s2", "s3"], mixed)).toEqual(["s3"]);
+  });
+
+  it("drops an id that is not among the rows at all", () => {
+    expect(deletable(["s1", "ghost"], rows("ready"))).toEqual(["s1"]);
+  });
+
+  it("counts a repeated id once, so a double-submitted form deletes one set", () => {
+    expect(deletable(["s1", "s1"], rows("ready"))).toEqual(["s1"]);
+  });
+
+  it("has nothing to do with an empty selection", () => {
+    expect(deletable([], rows("ready"))).toEqual([]);
+  });
+
+  // The gallery ticks `ready` sets only, but the delete rail reaches further: a batch full of
+  // failures is exactly what a shop wants to clear out, and none of those are approvable.
+  it("reaches sets `approvable` will not touch", () => {
+    const failed = rows("failed", "rejected");
+    expect(approvable(["s1", "s2"], failed)).toEqual([]);
+    expect(deletable(["s1", "s2"], failed)).toEqual(["s1", "s2"]);
+  });
+});
+
+/**
+ * A batch is deletable only when nothing on the server is still writing to it. `processing` has a
+ * tick claiming its sets; `exporting` has a route streaming a ZIP out of them. Deleting either
+ * would leave a live function writing to rows that no longer exist.
+ */
+describe("batchDeletable", () => {
+  it.each(["ready", "exported", "failed"])("allows a batch that has settled at %s", status => {
+    expect(batchDeletable(status)).toBe(true);
+  });
+
+  it.each(["processing", "exporting"])("refuses a batch still working at %s", status => {
+    expect(batchDeletable(status)).toBe(false);
   });
 });

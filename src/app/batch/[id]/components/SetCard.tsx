@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Button } from "@/app/components/ui";
+import { Button, ConfirmButton } from "@/app/components/ui";
 import type { MemberStates } from "@/lib/memberState";
 import type { GallerySet } from "../Gallery";
 
@@ -30,6 +30,7 @@ export function SetCard({
   onApprove,
   onReject,
   onRegenerate,
+  onDelete,
 }: {
   row: GallerySet;
   selected: boolean;
@@ -38,6 +39,7 @@ export function SetCard({
   onApprove: () => void;
   onReject: () => void;
   onRegenerate: (note: string) => void;
+  onDelete: () => void;
 }) {
   const [note, setNote] = useState<string | null>(null);
   const { kidName, age, theme } = row.input;
@@ -53,7 +55,9 @@ export function SetCard({
           type="checkbox"
           className="size-4 accent-[var(--color-mat)]"
           checked={selected}
-          disabled={row.status !== "ready"}
+          // Not `ready`-only any more: the rail's delete reaches every settled set, and a batch full
+          // of failures is exactly the selection a shop wants to make. Approval still filters itself.
+          disabled={busy}
           aria-label={`Pilih set ${kidName}`}
           onChange={e => onSelect(e.target.checked)}
         />
@@ -97,6 +101,19 @@ export function SetCard({
         <Button variant="quiet" data-testid="reject" disabled={busy} pending={pending === `reject:${row.id}`} onClick={onReject}>
           Tolak
         </Button>
+        {/* Pushed to the far end, away from Tolak: the two verdicts read alike in a hurry and only
+            one of them can be taken back. Refused while a tick may still write to the row. */}
+        <ConfirmButton
+          className="ml-auto"
+          testId="delete-set"
+          confirm={`Hapus ${kidName}?`}
+          disabled={busy}
+          pending={pending === `delete:${row.id}`}
+          title={busy ? "Set ini masih diproses" : `Hapus set ${kidName} untuk selamanya`}
+          onConfirm={onDelete}
+        >
+          Hapus
+        </ConfirmButton>
       </div>
 
       {note !== null && (

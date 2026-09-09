@@ -46,9 +46,12 @@ test.describe(() => {
     test.setTimeout(600_000);
 
     const csv = await buildCsv();
+    // The file name becomes the batch name, and a unique one is what lets the last assertion tell
+    // this run's batch from any left behind by an earlier one.
+    const batchName = `batch-e2e-${Date.now()}.csv`;
 
     await page.goto("/batch/new");
-    await page.getByTestId("csv-input").setInputFiles({ name: "batch-e2e.csv", mimeType: "text/csv", buffer: csv });
+    await page.getByTestId("csv-input").setInputFiles({ name: batchName, mimeType: "text/csv", buffer: csv });
 
     // The counts come from the committed sample: 3 rows, 4 + 3 + 3 = 10 members.
     await page.getByTestId("check").click();
@@ -90,6 +93,25 @@ test.describe(() => {
     const zip = page.getByTestId("download-zip");
     await expect(zip).toBeVisible({ timeout: 300_000 });
     expect(await zip.getAttribute("href")).toMatch(/\.zip$/);
+
+    // Deleting is the last leg on purpose. It needs a real batch with real sets and a real ZIP
+    // behind it, which is exactly what the run has just built — and taking it away again is what
+    // keeps this spec from leaving a batch in the shop's database every time it passes.
+    const doomed = page.locator('[data-testid="set-card"]:not([data-status="approved"])').first();
+    const kid = await doomed.locator("h2").textContent();
+    await doomed.getByTestId("delete-set").click();
+    // The button arms rather than fires: nothing is gone until the second click.
+    await expect(page.getByTestId("set-card")).toHaveCount(3);
+    await doomed.getByTestId("delete-set-confirm").click();
+    await expect(page.getByTestId("set-card")).toHaveCount(2, { timeout: 60_000 });
+    expect(await readCards(page)).not.toContainEqual(expect.objectContaining({ kid }));
+
+    // And the batch itself, which takes the two remaining sets with it and lands back on the home
+    // page — the row it was rendered from no longer exists to render again.
+    await page.getByTestId("delete-batch").click();
+    await page.getByTestId("delete-batch-confirm").click();
+    await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
+    await expect(page.getByRole("link", { name: batchName })).toHaveCount(0);
   });
 });
 

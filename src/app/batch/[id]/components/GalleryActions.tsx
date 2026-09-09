@@ -1,28 +1,40 @@
 "use client";
 
-import { Button } from "@/app/components/ui";
+import { Button, ConfirmButton } from "@/app/components/ui";
 
 /**
- * The bulk rail above the cards. It only ever talks about sets that are `ready`: those are the only
- * ones a tick has finished and the only ones an approval may move.
+ * The bulk rail above the cards.
+ *
+ * It talks about two different selections drawn from the same ticked boxes. An approval may only
+ * move a `ready` set, so that button counts those; a delete reaches every settled set, failed and
+ * rejected included, which is most of what a shop actually wants to clear out. The rail reports the
+ * wider of the two, because that is how many boxes are ticked and doing anything else makes the
+ * count look broken.
  */
 export function GalleryActions({
   readyCount,
   approvedCount,
   selected,
+  removable,
   pending,
+  deleting,
   exporting,
   exportStale,
   zipUrl,
   onSelectAll,
   onClear,
   onApprove,
+  onDelete,
   onExport,
 }: {
   readyCount: number;
   approvedCount: number;
+  /** Ticked boxes an approval may move: the `ready` ones. */
   selected: number;
+  /** Ticked boxes a delete may remove: every settled one, so never fewer than `selected`. */
+  removable: number;
   pending: boolean;
+  deleting: boolean;
   exporting: boolean;
   /** The export has outlived the route that could have written it; the run may be started again. */
   exportStale: boolean;
@@ -30,15 +42,16 @@ export function GalleryActions({
   onSelectAll: () => void;
   onClear: () => void;
   onApprove: () => void;
+  onDelete: () => void;
   onExport: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-rule px-1 py-3">
       <p className="text-[13px] text-muted" data-testid="selection-count">
-        {selected > 0 ? `${selected} set dipilih` : `${readyCount} set menunggu diperiksa`}
+        {removable > 0 ? `${removable} set dipilih` : `${readyCount} set menunggu diperiksa`}
       </p>
       <div className="ml-auto flex flex-wrap gap-1.5">
-        {selected > 0 ? (
+        {removable > 0 ? (
           <Button variant="quiet" onClick={onClear}>
             Bersihkan pilihan
           </Button>
@@ -50,6 +63,18 @@ export function GalleryActions({
         <Button variant="primary" data-testid="approve-selected" disabled={selected === 0} pending={pending} onClick={onApprove}>
           Setujui terpilih
         </Button>
+        {/* Offered only once something is ticked. A delete rail standing permanently beside the
+            approve button invites the misclick it cannot undo. */}
+        {removable > 0 && (
+          <ConfirmButton
+            testId="delete-selected"
+            confirm={removable === 1 ? "Hapus 1 set?" : `Hapus ${removable} set?`}
+            pending={deleting}
+            onConfirm={onDelete}
+          >
+            Hapus terpilih
+          </ConfirmButton>
+        )}
         {/* The ZIP is only worth offering once something is in it, and the link says nothing about
             how many sets are inside: a truncated export would otherwise be labelled with the number
             the shop approved rather than the number the file actually holds. It is hidden while an

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/app/components/ui";
-import { progressFraction, progressLine, isBusy, resumeOffered, type GalleryCounts } from "../galleryRules";
+import { Button, ConfirmButton } from "@/app/components/ui";
+import { batchDeletable, progressFraction, progressLine, isBusy, resumeOffered, type GalleryCounts } from "../galleryRules";
 
 /**
  * The bench's header: what the batch is, how far it has got, and — only while something is still
@@ -16,7 +16,9 @@ export function StatusBar({
   notice,
   stuck,
   resuming,
+  deleting,
   onResume,
+  onDelete,
 }: {
   name: string;
   counts: GalleryCounts;
@@ -25,7 +27,9 @@ export function StatusBar({
   notice: string | null;
   stuck: boolean;
   resuming: boolean;
+  deleting: boolean;
   onResume: () => void;
+  onDelete: () => void;
 }) {
   const busy = isBusy(counts);
   // Every set settled while the batch row is still open: a tick died before its own roll-up, and
@@ -77,6 +81,22 @@ export function StatusBar({
           >
             Lanjutkan
           </Button>
+        )}
+        {/* Hidden, not merely disabled, while a tick or an export is still running: the action
+            refuses those outright and there is no stale-window retry to reach, so a greyed-out
+            button would only pose a question the page cannot answer. `ml-auto` on whichever of the
+            two controls comes first keeps both pinned to the right. */}
+        {batchDeletable(batchStatus) && (
+          <ConfirmButton
+            className={resumeOffered(counts, batchStatus) ? "" : "ml-auto"}
+            testId="delete-batch"
+            confirm={`Hapus batch dan ${counts.total} set-nya?`}
+            pending={deleting}
+            title="Hapus batch ini beserta semua setnya untuk selamanya"
+            onConfirm={onDelete}
+          >
+            Hapus batch
+          </ConfirmButton>
         )}
       </div>
       <div

@@ -131,3 +131,71 @@ export function useAction() {
   );
   return { pending, run };
 }
+
+/**
+ * A destructive button that asks once before it fires.
+ *
+ * The confirmation replaces the button in place rather than opening `window.confirm`: a native
+ * dialog blocks the poll behind it, cannot be styled to say what is about to be deleted, and is
+ * awkward to drive from a test. The armed state disarms itself after a few seconds, so a click made
+ * on the way past a card never sits there waiting to be completed by an unrelated one.
+ *
+ * `pending` keeps the confirm button armed while the action runs; the caller's `run` clears it.
+ */
+export function ConfirmButton({
+  children,
+  confirm = "Yakin hapus?",
+  pending,
+  disabled,
+  variant = "quiet",
+  className = "",
+  title,
+  testId,
+  onConfirm,
+}: {
+  children: ReactNode;
+  /** What the armed button says — name the thing being removed where there is room for it. */
+  confirm?: string;
+  pending?: boolean;
+  disabled?: boolean;
+  variant?: "primary" | "default" | "quiet";
+  className?: string;
+  title?: string;
+  testId?: string;
+  onConfirm: () => void;
+}) {
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    if (!armed || pending) return;
+    const timer = setTimeout(() => setArmed(false), 5000);
+    return () => clearTimeout(timer);
+  }, [armed, pending]);
+
+  if (!armed) {
+    return (
+      <Button variant={variant} className={className} disabled={disabled} title={title} data-testid={testId} onClick={() => setArmed(true)}>
+        {children}
+      </Button>
+    );
+  }
+  return (
+    // The caller's `className` belongs to the group, not to the button inside it: it is how a rail
+    // positions this control (`ml-auto`), and hanging it on the inner button instead let the armed
+    // pair jump out of the place the disarmed button held.
+    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+      <Button
+        variant="primary"
+        className="!bg-alert !text-white hover:!bg-alert"
+        pending={pending}
+        data-testid={testId && `${testId}-confirm`}
+        onClick={onConfirm}
+      >
+        {confirm}
+      </Button>
+      <Button variant="quiet" disabled={pending} onClick={() => setArmed(false)}>
+        Batal
+      </Button>
+    </span>
+  );
+}

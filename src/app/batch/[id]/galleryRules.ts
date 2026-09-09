@@ -122,3 +122,35 @@ export function approvable(ids: string[], rows: StatusRow[]): string[] {
 export function statusSignature(rows: { id: string; status: string; memberStates?: unknown }[]): string {
   return rows.map(r => `${r.id}:${r.status}:${JSON.stringify(r.memberStates ?? null)}`).join("|");
 }
+
+/**
+ * Which of the ids asked for may actually be deleted: everything among `rows` that no tick is
+ * holding.
+ *
+ * Wider than `approvable` on purpose. An approval only ever moves a `ready` set, but the sets a
+ * shop most wants gone are the failed and the rejected ones, so every settled status qualifies.
+ * `isUnderway` is the whole guard: a `queued` or `processing` row belongs to a tick that will write
+ * its result back, and deleting it under that tick leaves the write with no row to land on.
+ *
+ * Scoped exactly as `approvable` is — an id absent from `rows` is dropped, and the caller decides
+ * what `rows` holds. See that function for why the app's no-accounts posture makes this the
+ * existing stance rather than a hole opened here.
+ */
+export function deletable(ids: string[], rows: StatusRow[]): string[] {
+  const settled = new Set(rows.filter(r => !isUnderway(r.status)).map(r => r.id));
+  return [...new Set(ids)].filter(id => settled.has(id));
+}
+
+/**
+ * Whether a whole batch may be deleted.
+ *
+ * The two refusals are the two states with a live function behind them: `processing` has a tick
+ * claiming sets, `exporting` has a route streaming a ZIP out of them. Deleting either would leave
+ * that function writing to rows that no longer exist — and, worse, a tick that re-opens the batch
+ * row it is holding would resurrect a batch the shop believes it deleted.
+ *
+ * Unlike the export's own stale-window escape, there is no time-based override here: a delete is
+ * the one verdict that cannot be walked back, so a batch wedged at `exporting` is cleared with
+ * "Lanjutkan" or the export retry first, and deleted afterwards.
+ */
+export const batchDeletable = (batchStatus: string) => batchStatus !== "processing" && batchStatus !== "exporting";

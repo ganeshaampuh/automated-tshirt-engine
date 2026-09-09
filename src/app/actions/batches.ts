@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { waitUntil } from "@vercel/functions";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { strandedSets } from "@/db/claimSets";
-import { approvable, isUnderway } from "@/app/batch/[id]/galleryRules";
+import { approvable, batchDeletable, deletable, isUnderway } from "@/app/batch/[id]/galleryRules";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
-import { deleteBlob, putBlob } from "@/lib/blob";
+import { deleteBlob, deleteBlobs, putBlob } from "@/lib/blob";
 import { rowsToInserts } from "@/lib/batchInserts";
 import { parseBatchRows, type ParsedRow, type RowError } from "@/lib/csv";
 import { initialStates } from "@/lib/memberState";
@@ -158,6 +158,9 @@ async function refreshCounts(batchId: string) {
   await db
     .update(batches)
     .set({
+      // Recomputed, not left at what the CSV had: a deleted set has to leave the home page's
+      // "20 set" as well as its "12 siap", or the batch keeps advertising rows nobody can open.
+      setCount: rows.reduce((total, r) => total + r.n, 0),
       readyCount: n("ready"),
       approvedCount: n("approved"),
       failedCount: n("failed"),
@@ -383,5 +386,105 @@ export async function exportBatchAction(id: string): Promise<ActionResult<{ star
     kick(await requestOrigin(), id, "export");
     revalidatePath(`/batch/${id}`);
     return { started: true };
+  });
+}
+
+/**
+ * Deletes the sets the shop asked for — one card's button or the whole ticked selection, which is
+ * the same call with a longer array.
+ *
+ * `deletable` decides which ids actually go: everything settled, whatever verdict it carries, but
+ * never a set a tick may still be holding. The `notInArray` in the DELETE repeats that guard in
+ * SQL, because between the read and the write a resume or a regeneration may have put the row back
+ * in the queue, and only the database can settle that race. Ids that lose it are dropped silently
+ * and the answer says how many rows really went.
+ *
+ * Also serves the home page's set list, where a set has no batch at all: `refreshCounts` is skipped
+ * for those, and everything else applies unchanged.
+ */
+export async function deleteSetsAction(ids: string[]): Promise<ActionResult<{ deleted: number }>> {
+  return action(async () => {
+    const wanted = [...new Set(ids)];
+    if (wanted.length === 0) return { deleted: 0 };
+    const rows = await db
+      .select({ id: sets.id, status: sets.status, batchId: sets.batchId })
+      .from(sets)
+      .where(inArray(sets.id, wanted))
+      .catch(e => fail("Gagal membaca set ini.", e));
+
+    const going = deletable(wanted, rows);
+    if (going.length === 0) return { deleted: 0 };
+
+    // `returning` is what makes the blob cleanup safe: it names the rows this statement actually
+    // removed, so a row the guard refused never has its export deleted out from under it.
+    const gone = await db
+      .delete(sets)
+      .where(and(inArray(sets.id, going), notInArray(sets.status, ["queued", "processing"])))
+      .returning({ id: sets.id, exportUrl: sets.exportUrl })
+      .catch(e => fail("Gagal menghapus set.", e));
+    if (gone.length === 0) return { deleted: 0 };
+
+    // After the rows, never before: a delete that failed here leaves a file nobody points at, while
+    // the other order would leave a set on the bench whose download is a dead link.
+    await deleteBlobs(gone.map(g => g.exportUrl));
+
+    const removed = new Set(gone.map(g => g.id));
+    const batchIds = [...new Set(rows.filter(r => removed.has(r.id) && r.batchId).map(r => r.batchId!))];
+    // A batch whose last queued set was just deleted has nothing left to do, and `refreshCounts`
+    // closes it — the same verdict a finished tick would have reached.
+    for (const batchId of batchIds) await refreshCounts(batchId);
+    for (const batchId of batchIds) revalidatePath(`/batch/${batchId}`);
+    revalidatePath("/");
+    return { deleted: gone.length };
+  });
+}
+
+/**
+ * Deletes a whole batch: its sets, its row, and every file the two of them own.
+ *
+ * `batchDeletable` refuses the two states with a live function behind them, so by the time anything
+ * is removed there is no tick claiming these sets and no export streaming a ZIP out of them.
+ *
+ * The batch row goes first, guarded on the status that was read — the reverse of what the sets-then-
+ * batch order would suggest, and deliberately so. That guarded DELETE is the lock: it is what makes
+ * a double-clicked button, or a batch that slipped into `processing` between the read and the write,
+ * delete nothing at all. Losing that would let two callers both start clearing the same batch. The
+ * cost of this order is that a failure between the two statements leaves the batch's sets behind
+ * with a `batchId` pointing at nothing — they stay visible and individually deletable on the home
+ * page, which is a far smaller problem than a half-deleted batch that a tick can resurrect.
+ *
+ * Sets are removed by `batchId` without consulting `deletable`, which the guard above has already
+ * earned: the only rows that can still be `processing` here are ones a dead tick stranded, and
+ * nothing is left running that could write to them.
+ */
+export async function deleteBatchAction(id: string): Promise<ActionResult<{ deleted: number }>> {
+  return action(async () => {
+    const batch = await db.query.batches.findFirst({ where: eq(batches.id, id) }).catch(e => fail("Gagal membaca batch.", e));
+    if (!batch) fail("Batch ini tidak ada.");
+    if (!batchDeletable(batch.status)) {
+      fail(
+        batch.status === "processing"
+          ? "Batch masih diproses. Tunggu sampai selesai sebelum menghapusnya."
+          : "Batch sedang diekspor. Tunggu ZIP-nya selesai sebelum menghapusnya.",
+      );
+    }
+
+    const claimed = await db
+      .delete(batches)
+      .where(and(eq(batches.id, id), eq(batches.status, batch.status)))
+      .returning({ id: batches.id })
+      .catch(e => fail("Gagal menghapus batch.", e));
+    // Somebody else got there first, or the batch started working between the read and this write.
+    if (claimed.length === 0) return { deleted: 0 };
+
+    const gone = await db
+      .delete(sets)
+      .where(eq(sets.batchId, id))
+      .returning({ exportUrl: sets.exportUrl })
+      .catch(e => fail("Batch dihapus, tapi set-nya gagal dihapus. Coba muat ulang halaman.", e));
+
+    await deleteBlobs([batch.csvUrl, batch.zipUrl, ...gone.map(g => g.exportUrl)]);
+    revalidatePath("/");
+    return { deleted: gone.length };
   });
 }
