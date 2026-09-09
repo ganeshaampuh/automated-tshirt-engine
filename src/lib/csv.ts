@@ -142,6 +142,11 @@ function buildInput(get: (col: string) => string): SetInput {
   const language: Language = langRaw === "en" ? "en" : "id";
 
   const clipart = get("clipart_url").trim();
+  // Deliberately narrower than `ClipartSrc` in `@/engine`: that schema also allows the asset paths
+  // this app ships (`tests/fixtures/`, `public/`, `/samples/`, ...) because its own code names them.
+  // A CSV is operator input, so it may name only a remote https image or an inline data: image —
+  // it must never be able to point a set at a path inside the repo. Do not replace this check with
+  // `SetInputSchema` validation alone; that would silently reopen those paths.
   if (clipart !== "" && !clipart.startsWith("https://") && !clipart.startsWith("data:image/")) {
     throw new Error(`Kolom clipart_url harus berupa URL https atau data:image, bukan "${clipart}".`);
   }

@@ -15,6 +15,16 @@ describe("parseCsv", () => {
   it("ignores a trailing blank line", () => {
     expect(parseCsv("a\n1\n\n")).toEqual([["a"], ["1"]]);
   });
+  // The cases a quote-aware per-line splitter gets wrong; they are why this is a character scanner.
+  it("keeps a newline inside a quoted field", () => {
+    expect(parseCsv('a,b\n"x\ny",2\n')).toEqual([["a", "b"], ["x\ny", "2"]]);
+  });
+  it("reads a last record with no trailing newline", () => {
+    expect(parseCsv("a,b\n1,2")).toEqual([["a", "b"], ["1", "2"]]);
+  });
+  it("treats a lone CR as a record terminator", () => {
+    expect(parseCsv("a,b\r1,2\r")).toEqual([["a", "b"], ["1", "2"]]);
+  });
 });
 
 describe("parseMembers", () => {
@@ -23,6 +33,12 @@ describe("parseMembers", () => {
       .toEqual([["Ayah", "family", "adult"], ["Keisya", "birthday-kid", "kids-1-9"]]);
     expect(parseMembers("Bima:kid", 1)[0].sizeClass).toBe("kids-0-1");
     expect(parseMembers("Nadia:kid", 11)[0].sizeClass).toBe("adult");
+  });
+  it("picks the birthday child's class on every age boundary", () => {
+    expect(parseMembers("A:kid", 0)[0].sizeClass).toBe("kids-0-1");
+    expect(parseMembers("A:kid", 2)[0].sizeClass).toBe("kids-1-9");
+    expect(parseMembers("A:kid", 9)[0].sizeClass).toBe("kids-1-9");
+    expect(parseMembers("A:kid", 10)[0].sizeClass).toBe("adult");
   });
   it("gives every member a distinct id", () => {
     const ids = parseMembers("Ayah:adult;Ayah:adult;A:kid", 5).map(m => m.id);
@@ -76,5 +92,33 @@ describe("parseBatchRows", () => {
   it("refuses a row whose clipart_url is not https", () => {
     const row = "kid_name,age,theme,members,clipart_url\nK,5,u,A:adult;K:kid,http://x/y.png\n";
     expect(parseBatchRows(row).errors[0].message).toMatch(/https/i);
+  });
+
+  it("accepts a data: image but refuses every bundled asset path", () => {
+    const file = (clipart: string) =>
+      `kid_name,age,theme,members,clipart_url\nK,5,u,A:adult;K:kid,${clipart}\n`;
+
+    // The data URL holds a comma, so a real CSV must quote it — the scanner keeps it in one field.
+    const ok = parseBatchRows(file('"data:image/png;base64,AAAA"'));
+    expect(ok.errors).toEqual([]);
+    expect(ok.rows[0].input.clipartSrc).toBe("data:image/png;base64,AAAA");
+
+    // These pass `ClipartSrc` in @/engine; a CSV is operator input, so csv.ts narrows it further.
+    for (const path of ["/samples/unicorn.png", "public/x.png", "tests/fixtures/unicorn.png"]) {
+      const { rows, errors } = parseBatchRows(file(path));
+      expect(rows, path).toEqual([]);
+      expect(errors[0].message, path).toMatch(/clipart_url/);
+    }
+  });
+
+  it("counts physical lines when a quoted field spans several", () => {
+    const text =
+      'kid_name,age,theme,members\nK,5,"unicorn\npastel",A:adult;K:kid\nBima,notanumber,dino,B:kid\n';
+    const { rows, errors } = parseBatchRows(text);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].line).toBe(2);
+    expect(rows[0].input.theme).toBe("unicorn\npastel");
+    // A per-line splitter would report line 3 here; the bad row really starts on file line 4.
+    expect(errors).toEqual([{ line: 4, message: expect.stringMatching(/umur/i) }]);
   });
 });
