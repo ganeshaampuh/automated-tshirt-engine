@@ -12,6 +12,7 @@ export function GalleryActions({
   selected,
   pending,
   exporting,
+  exportStale,
   zipUrl,
   onSelectAll,
   onClear,
@@ -23,6 +24,8 @@ export function GalleryActions({
   selected: number;
   pending: boolean;
   exporting: boolean;
+  /** The export has outlived the route that could have written it; the run may be started again. */
+  exportStale: boolean;
   zipUrl: string | null;
   onSelectAll: () => void;
   onClear: () => void;
@@ -47,12 +50,14 @@ export function GalleryActions({
         <Button variant="primary" data-testid="approve-selected" disabled={selected === 0} pending={pending} onClick={onApprove}>
           Setujui terpilih
         </Button>
-        {/* The ZIP is only worth offering once something is in it. The link says nothing about how
-            many sets are inside — a truncated export would otherwise be labelled with the number of
-            sets the shop approved rather than the number the file actually holds — and a ZIP that
-            existing ZIP never replaces the button: an export that came out short, and a set approved
-            after the file was written, both need a second run, and neither can be had from a link. */}
-        {approvedCount > 0 && zipUrl !== null && !exporting && (
+        {/* The ZIP is only worth offering once something is in it, and the link says nothing about
+            how many sets are inside: a truncated export would otherwise be labelled with the number
+            the shop approved rather than the number the file actually holds. It is hidden while an
+            export is running, so nobody downloads the previous file believing it holds today's
+            approvals — but it comes back once that export is stale, because then the file on the
+            row is all the shop has. Having a link never removes the button: an export that came out
+            short, and a set approved after the file was written, both need a second run. */}
+        {approvedCount > 0 && zipUrl !== null && (!exporting || exportStale) && (
           <a
             href={zipUrl}
             download
@@ -62,9 +67,17 @@ export function GalleryActions({
             Unduh ZIP
           </a>
         )}
+        {/* Disabled only while an export can still be alive. A batch left at `exporting` by a kick
+            that never arrived has no other way back, so past the stale window the button works
+            again and says so — this is the one affordance that reaches the action's own retry. */}
         {approvedCount > 0 && (
-          <Button data-testid="export-zip" pending={exporting} disabled={exporting} onClick={onExport}>
-            {exporting ? "Menyiapkan ZIP…" : zipUrl === null ? "Buat ZIP" : "Buat ulang ZIP"}
+          <Button
+            data-testid="export-zip"
+            pending={exporting && !exportStale}
+            disabled={exporting && !exportStale}
+            onClick={onExport}
+          >
+            {exporting ? (exportStale ? "Coba buat ZIP lagi" : "Menyiapkan ZIP…") : zipUrl === null ? "Buat ZIP" : "Buat ulang ZIP"}
           </Button>
         )}
       </div>

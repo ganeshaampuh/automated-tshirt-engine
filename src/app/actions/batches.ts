@@ -369,9 +369,12 @@ export async function exportBatchAction(id: string): Promise<ActionResult<{ star
 
     const claimed = await db
       .update(batches)
-      // The old `zipUrl` is dropped as the new export starts: half an hour later the shop must not
-      // be handed yesterday's file believing it holds today's approvals.
-      .set({ status: "exporting", zipUrl: null, error: null, updatedAt: new Date() })
+      // The previous `zipUrl` is deliberately left in place until the route writes the new one. An
+      // export that dies — a lost kick, a killed function — would otherwise leave the shop with
+      // nothing downloadable at all after two hours of rendering. The gallery is what keeps the old
+      // file from being mistaken for the new one: it hides the download link while the export can
+      // still be running, and shows it again only once that export is stale.
+      .set({ status: "exporting", error: null, updatedAt: new Date() })
       .where(and(eq(batches.id, id), eq(batches.status, batch.status)))
       .returning({ id: batches.id })
       .catch(e => fail("Gagal memulai ekspor.", e));

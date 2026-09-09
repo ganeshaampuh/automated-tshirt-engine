@@ -9,7 +9,7 @@ import type { MemberStates } from "@/lib/memberState";
 import { GalleryActions } from "./components/GalleryActions";
 import { SetCard } from "./components/SetCard";
 import { StatusBar } from "./components/StatusBar";
-import { approvable, galleryCounts, isBusy, statusSignature } from "./galleryRules";
+import { approvable, exportRetryable, galleryCounts, isBusy, statusSignature } from "./galleryRules";
 
 /** What one card needs from a row; the page hands over nothing else. */
 export type GallerySet = {
@@ -37,6 +37,8 @@ type BoardProps = {
   batchId: string;
   name: string;
   batchStatus: string;
+  /** The batch row's `updated_at`, epoch ms — how old the current `exporting` claim is. */
+  updatedAt: number;
   zipUrl: string | null;
   batchError: string | null;
   sets: GallerySet[];
@@ -50,7 +52,7 @@ export default function Gallery(props: BoardProps) {
   );
 }
 
-function Board({ batchId, name, batchStatus, zipUrl, batchError, sets }: BoardProps) {
+function Board({ batchId, name, batchStatus, updatedAt, zipUrl, batchError, sets }: BoardProps) {
   const router = useRouter();
   const { show } = useToast();
   const { pending, run } = useAction();
@@ -62,6 +64,29 @@ function Board({ batchId, name, batchStatus, zipUrl, batchError, sets }: BoardPr
   const exporting = batchStatus === "exporting";
   const busy = isBusy(counts) || exporting;
   const [stuck, setStuck] = useState(false);
+
+  /**
+   * The browser's clock, sampled while an export is running — and only there.
+   *
+   * `Date.now()` is never read during a render: the server's answer and the client's would differ
+   * and React would call that a hydration mismatch. It starts at 0, which reads as "not sampled
+   * yet" and keeps the first paint identical on both sides; the first sample lands immediately
+   * after mount and then follows the poll's cadence, so an export that dies while the tab is open
+   * grows its retry on its own rather than needing a reload.
+   */
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (!exporting) return;
+    const sample = () => setNow(Date.now());
+    const first = setTimeout(sample, 0);
+    const timer = setInterval(sample, POLL_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [exporting]);
+  /** Whether this export has been sitting in `exporting` long enough that no function still holds it. */
+  const exportStale = now !== 0 && exportRetryable(batchStatus, updatedAt, now);
 
   // When the last render showed something different from the one before it, work is alive.
   const signature = useMemo(() => `${batchStatus}:${zipUrl ?? ""}:${batchError ?? ""}|${statusSignature(sets)}`, [batchStatus, zipUrl, batchError, sets]);
@@ -137,6 +162,7 @@ function Board({ batchId, name, batchStatus, zipUrl, batchError, sets }: BoardPr
           selected={selected.length}
           pending={pending === "approve-selected"}
           exporting={exporting}
+          exportStale={exportStale}
           zipUrl={zipUrl}
           onExport={() =>
             run("export", async () => {

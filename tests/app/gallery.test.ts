@@ -5,6 +5,8 @@ import { strandedSets } from "@/db/claimSets";
 import { STALE_CLAIM_MINUTES, TICK_MAX_SECONDS } from "@/lib/processSet";
 import {
   approvable,
+  EXPORT_STALE_MS,
+  exportRetryable,
   galleryCounts,
   isBusy,
   isUnderway,
@@ -158,6 +160,36 @@ describe("resumeOffered", () => {
   it("stays out of the way once the batch is closed", () => {
     expect(resumeOffered(galleryCounts(rows("ready", "approved")), "ready")).toBe(false);
     expect(resumeOffered(galleryCounts(rows("approved")), "exported")).toBe(false);
+  });
+});
+
+describe("exportRetryable", () => {
+  const now = 1_700_000_000_000;
+
+  it("keeps the export button out of the way while the export can still be alive", () => {
+    expect(exportRetryable("exporting", now - 1000, now)).toBe(false);
+    expect(exportRetryable("exporting", now - EXPORT_STALE_MS, now)).toBe(false);
+  });
+
+  it("offers the retry once the export has outlived the function that could have written it", () => {
+    // The wedge this exists for: the action flips the batch to `exporting` and the kick is lost —
+    // a transient 500, a cold start, an empty origin — so no route ever runs. Without this the only
+    // button that calls the action is disabled forever and the batch needs a hand-edited row.
+    expect(exportRetryable("exporting", now - EXPORT_STALE_MS - 1, now)).toBe(true);
+    expect(exportRetryable("exporting", now - 3 * EXPORT_STALE_MS, now)).toBe(true);
+  });
+
+  it("says nothing about a batch that is not exporting", () => {
+    for (const status of ["processing", "ready", "exported"]) {
+      expect(exportRetryable(status, now - 3 * EXPORT_STALE_MS, now)).toBe(false);
+    }
+  });
+
+  it("holds the gallery's window to the one the action itself enforces", () => {
+    // `exportBatchAction` refuses a second export while `exporting` is younger than
+    // `TICK_MAX_SECONDS * 2000`. A wider window here would offer a retry the action refuses; a
+    // narrower one would leave the recovery unreachable again.
+    expect(EXPORT_STALE_MS).toBe(TICK_MAX_SECONDS * 2000);
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
 import { unicornSet } from "../fixtures/set-unicorn";
+import { liveDb } from "./live";
 
 /**
  * The gallery's verdicts against a real database: what `approveSetsAction` and `rejectSetAction`
@@ -17,7 +18,7 @@ import { unicornSet } from "../fixtures/set-unicorn";
  */
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-const live = Boolean(process.env.DATABASE_URL);
+const live = liveDb;
 const made: string[] = [];
 
 /** A batch of two `ready` sets, already closed the way a finished tick would leave it. */
@@ -80,6 +81,28 @@ describe.skipIf(!live)("db: gallery verdicts roll up onto the batch", () => {
     expect(batch.readyCount).toBe(0);
     // Each step here is a round trip to a hosted Postgres; the default 5 s is not this test's
     // subject.
+  }, 30_000);
+
+  it("starts an export without dropping the ZIP the shop already has", async () => {
+    // The wedge: the action used to null `zipUrl` as it flipped to `exporting`, so an export whose
+    // kick was lost left the shop with a batch stuck on a spinner *and* nothing downloadable — two
+    // hours of rendering recoverable only by hand-editing the row. The previous file stays until
+    // the route writes the new one; the gallery hides the link while the export may still be alive.
+    const { exportBatchAction } = await import("@/app/actions/batches");
+    const { db, schema } = await import("@/db");
+    const { batchId, setIds } = await seed("ready");
+    const previous = "https://blob.invalid/batches/previous.zip";
+    await db.update(schema.batches).set({ zipUrl: previous }).where(eq(schema.batches.id, batchId));
+    await db.update(schema.sets).set({ status: "approved" }).where(eq(schema.sets.id, setIds[0]));
+
+    // No route runs behind this: `tickOrigin` answers "" in a test process, so the kick is logged
+    // and skipped — which is exactly the lost kick this test is about.
+    const res = await exportBatchAction(batchId);
+    expect(res).toEqual({ ok: true, data: { started: true } });
+
+    const batch = await readBatch(batchId);
+    expect(batch.status).toBe("exporting");
+    expect(batch.zipUrl).toBe(previous);
   }, 30_000);
 
   it("records a verdict during an export without dragging the batch back to ready", async () => {

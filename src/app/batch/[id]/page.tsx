@@ -29,5 +29,18 @@ export default async function BatchPage({ params }: PageProps<"/batch/[id]">) {
     // after each verdict, and the cards would shuffle under the shop's cursor between polls.
     .orderBy(asc(schema.sets.createdAt), asc(schema.sets.id));
 
-  return <Gallery batchId={batch.id} name={batch.name} batchStatus={batch.status} zipUrl={batch.zipUrl} batchError={batch.error} sets={rows satisfies GallerySet[]} />;
+  // `updatedAt` goes over as epoch milliseconds: the gallery compares it against the browser's own
+  // clock to decide whether an export has been sitting in `exporting` long enough to be dead, and a
+  // Date would be serialised into the client component anyway.
+  return (
+    <Gallery
+      batchId={batch.id}
+      name={batch.name}
+      batchStatus={batch.status}
+      updatedAt={batch.updatedAt.getTime()}
+      zipUrl={batch.zipUrl}
+      batchError={batch.error}
+      sets={rows satisfies GallerySet[]}
+    />
+  );
 }

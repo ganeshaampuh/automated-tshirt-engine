@@ -45,6 +45,33 @@ export const isUnderway = (status: string) => status === "queued" || status === 
 export const resumeOffered = (c: GalleryCounts, batchStatus: string) => isBusy(c) || batchStatus === "processing";
 
 /**
+ * How long a batch may sit at `exporting` before the gallery treats that export as dead.
+ *
+ * An export that is killed mid-stream never writes its own verdict, so `exporting` is the one
+ * status that can outlive the function holding it — and the batch would then have no button on the
+ * page able to move it, because the export button is disabled exactly while `exporting`. Ten
+ * minutes is twice the export route's own budget: past that there is no function left that could
+ * still be writing the ZIP.
+ *
+ * Written as a literal rather than imported from `@/lib/processSet`, which pulls in the node-only
+ * render stack and cannot be in the client bundle this module is part of. `tests/app/gallery.test.ts`
+ * fails if it ever drifts from `TICK_MAX_SECONDS * 2000`, the same threshold `exportBatchAction`
+ * enforces server-side.
+ */
+export const EXPORT_STALE_MS = 600_000;
+
+/**
+ * Whether the export may be started again.
+ *
+ * The server-side rule is in `exportBatchAction`, which refuses a second export while `exporting`
+ * is younger than this. Without the same rule here the recovery it offers is unreachable: the only
+ * button that calls the action is disabled while the batch says `exporting`, so a lost kick — a
+ * transient 500, a cold start, an empty origin — wedges the batch for good.
+ */
+export const exportRetryable = (batchStatus: string, updatedAt: number, now: number) =>
+  batchStatus === "exporting" && now - updatedAt > EXPORT_STALE_MS;
+
+/**
  * The status bar's sentence, spec §8.2: "12 dari 20 set siap · 3 disetujui · 1 gagal".
  *
  * "Siap" is a set whose artwork came out, so an approved or a rejected one still counts — the shop
