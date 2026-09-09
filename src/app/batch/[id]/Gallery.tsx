@@ -33,7 +33,9 @@ const POLL_MS = 3000;
  */
 const STUCK_MS = 3 * 60 * 1000;
 
-export default function Gallery(props: { batchId: string; name: string; sets: GallerySet[] }) {
+type BoardProps = { batchId: string; name: string; batchStatus: string; sets: GallerySet[] };
+
+export default function Gallery(props: BoardProps) {
   return (
     <ToastHost>
       <Board {...props} />
@@ -41,7 +43,7 @@ export default function Gallery(props: { batchId: string; name: string; sets: Ga
   );
 }
 
-function Board({ batchId, name, sets }: { batchId: string; name: string; sets: GallerySet[] }) {
+function Board({ batchId, name, batchStatus, sets }: BoardProps) {
   const router = useRouter();
   const { show } = useToast();
   const { pending, run } = useAction();
@@ -93,6 +95,7 @@ function Board({ batchId, name, sets }: { batchId: string; name: string; sets: G
       <StatusBar
         name={name}
         counts={counts}
+        batchStatus={batchStatus}
         stuck={stuck}
         resuming={pending === "resume"}
         onResume={() =>

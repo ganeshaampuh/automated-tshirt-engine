@@ -28,8 +28,21 @@ export function galleryCounts(rows: { status: string }[]): GalleryCounts {
   return counts;
 }
 
-/** Whether work is still moving — what the page polls on, and what "Lanjutkan" is offered for. */
+/** Whether work is still moving — what the page polls on. */
 export const isBusy = (c: GalleryCounts) => c.queued + c.processing > 0;
+
+/** Whether a tick may still be holding this set. Such a row is nobody else's to rewrite. */
+export const isUnderway = (status: string) => status === "queued" || status === "processing";
+
+/**
+ * Whether to offer "Lanjutkan".
+ *
+ * Not simply `isBusy`: a tick that died between its per-set writes and its roll-up leaves every set
+ * settled while the batch row still says `processing`, and that batch can only be closed by a
+ * resume. Offering the button whenever the batch is open keeps that state reachable instead of
+ * stranding it.
+ */
+export const resumeOffered = (c: GalleryCounts, batchStatus: string) => isBusy(c) || batchStatus === "processing";
 
 /**
  * The status bar's sentence, spec §8.2: "12 dari 20 set siap · 3 disetujui · 1 gagal".
@@ -54,12 +67,16 @@ export function progressLine(c: GalleryCounts): string {
 export const progressFraction = (c: GalleryCounts) => (c.total === 0 ? 0 : (c.total - c.queued - c.processing) / c.total);
 
 /**
- * Which of the ids asked for may actually be approved: the ones that are `ready` in this batch
- * right now.
+ * Which of the ids asked for may actually be approved: the ones that are `ready` among `rows`.
  *
  * A stale checkbox — the set failed, or another tab approved it since the page loaded — is dropped
  * rather than advanced, so "Setujui terpilih" can never approve a failed set or count an already
- * approved one twice. Ids from outside the batch are unknown here and dropped with them.
+ * approved one twice.
+ *
+ * This is a status rule, not a scoping one: an id is dropped when it is absent from `rows`, and the
+ * caller decides what `rows` holds. `approveSetsAction` reads the rows by id alone, so it will
+ * approve a `ready` set from another batch if one is named. The app has no accounts and every batch
+ * belongs to the same shop, so that is the existing posture rather than a hole opened here.
  */
 export function approvable(ids: string[], rows: StatusRow[]): string[] {
   const ready = new Set(rows.filter(r => r.status === "ready").map(r => r.id));

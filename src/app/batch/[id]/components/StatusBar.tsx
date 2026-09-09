@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/app/components/ui";
-import { progressFraction, progressLine, isBusy, type GalleryCounts } from "../galleryRules";
+import { progressFraction, progressLine, isBusy, resumeOffered, type GalleryCounts } from "../galleryRules";
 
 /**
  * The bench's header: what the batch is, how far it has got, and — only while something is still
@@ -12,17 +12,22 @@ import { progressFraction, progressLine, isBusy, type GalleryCounts } from "../g
 export function StatusBar({
   name,
   counts,
+  batchStatus,
   stuck,
   resuming,
   onResume,
 }: {
   name: string;
   counts: GalleryCounts;
+  batchStatus: string;
   stuck: boolean;
   resuming: boolean;
   onResume: () => void;
 }) {
   const busy = isBusy(counts);
+  // Every set settled while the batch row is still open: a tick died before its own roll-up, and
+  // only a resume can close it.
+  const wedged = !busy && batchStatus === "processing";
   const pct = Math.round(progressFraction(counts) * 100);
 
   return (
@@ -46,10 +51,15 @@ export function StatusBar({
             Tidak ada yang bergerak beberapa menit. Tekan “Lanjutkan” untuk menjalankan sisanya.
           </p>
         )}
-        {busy && (
+        {wedged && (
+          <p data-testid="wedged" className="text-[13px] text-alert">
+            Semua set sudah selesai, tapi batch-nya belum ditutup. Tekan “Lanjutkan”.
+          </p>
+        )}
+        {resumeOffered(counts, batchStatus) && (
           <Button
             className="ml-auto"
-            variant={stuck ? "primary" : "default"}
+            variant={stuck || wedged ? "primary" : "default"}
             data-testid="resume"
             pending={resuming}
             onClick={onResume}

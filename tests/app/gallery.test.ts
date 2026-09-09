@@ -1,7 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { strandedSets } from "@/db/claimSets";
-import { approvable, galleryCounts, isBusy, progressLine, statusSignature } from "@/app/batch/[id]/galleryRules";
+import {
+  approvable,
+  galleryCounts,
+  isBusy,
+  isUnderway,
+  progressLine,
+  resumeOffered,
+  statusSignature,
+} from "@/app/batch/[id]/galleryRules";
 
 const rows = (...statuses: string[]) => statuses.map((status, i) => ({ id: `s${i + 1}`, status }));
 
@@ -72,7 +80,9 @@ describe("approvable", () => {
     expect(approvable(["c"], batch)).toEqual([]);
   });
 
-  it("ignores a set that has not finished processing, and one from another batch", () => {
+  it("ignores a set that has not finished processing, and an id it was never shown", () => {
+    // Note what this does *not* pin: the rows handed in are whatever the caller read, so an id from
+    // another batch is dropped only because it is missing from `rows`, not because of any scoping.
     expect(approvable(["d", "zz"], batch)).toEqual([]);
   });
 
@@ -115,5 +125,36 @@ describe("strandedSets", () => {
     const injected = new PgDialect().sqlToQuery(strandedSets("' or true --", 5));
     expect(injected.sql).not.toContain("or true");
     expect(injected.params[0]).toBe("' or true --");
+  });
+});
+
+describe("isUnderway", () => {
+  it("is true for the two statuses a tick may be holding the row in", () => {
+    expect(isUnderway("queued")).toBe(true);
+    expect(isUnderway("processing")).toBe(true);
+  });
+
+  it("is false once the row is the shop's to judge", () => {
+    for (const status of ["ready", "approved", "rejected", "failed", "draft"]) {
+      expect(isUnderway(status)).toBe(false);
+    }
+  });
+});
+
+describe("resumeOffered", () => {
+  it("offers the resume while any set is queued or processing", () => {
+    expect(resumeOffered(galleryCounts(rows("ready", "queued")), "processing")).toBe(true);
+    expect(resumeOffered(galleryCounts(rows("ready", "processing")), "processing")).toBe(true);
+  });
+
+  it("still offers it for a batch left open with nothing left to do", () => {
+    // A tick that died between its writes and its roll-up leaves exactly this: every set settled,
+    // the batch row still `processing`. Without the button the batch could never be closed.
+    expect(resumeOffered(galleryCounts(rows("ready", "approved")), "processing")).toBe(true);
+  });
+
+  it("stays out of the way once the batch is closed", () => {
+    expect(resumeOffered(galleryCounts(rows("ready", "approved")), "ready")).toBe(false);
+    expect(resumeOffered(galleryCounts(rows("approved")), "exported")).toBe(false);
   });
 });

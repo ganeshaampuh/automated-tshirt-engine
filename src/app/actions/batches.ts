@@ -6,7 +6,7 @@ import { waitUntil } from "@vercel/functions";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { strandedSets } from "@/db/claimSets";
-import { approvable } from "@/app/batch/[id]/galleryRules";
+import { approvable, isUnderway } from "@/app/batch/[id]/galleryRules";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { deleteBlob, putBlob } from "@/lib/blob";
 import { rowsToInserts } from "@/lib/batchInserts";
@@ -127,7 +127,14 @@ export async function createBatchFromCsvAction(form: FormData): Promise<ActionRe
   });
 }
 
-/** Recomputes a batch's roll-up from its sets, so the header figures match the cards after a verdict. */
+/**
+ * Recomputes a batch's roll-up from its sets, so the header figures match the cards after a verdict.
+ *
+ * It also closes a batch that has nothing left to do. A tick that died between its per-set writes
+ * and its own roll-up leaves the batch at `processing` with no set queued or processing, which no
+ * later tick can ever resolve — every path through this function heals that. The `processing` guard
+ * keeps it from touching a batch that has moved on to exporting.
+ */
 async function refreshCounts(batchId: string) {
   const rows = await db
     .select({ status: sets.status, n: sql<number>`count(*)::int` })
@@ -135,6 +142,7 @@ async function refreshCounts(batchId: string) {
     .where(eq(sets.batchId, batchId))
     .groupBy(sets.status);
   const n = (status: string) => rows.find(r => r.status === status)?.n ?? 0;
+  const done = n("queued") + n("processing") === 0;
   await db
     .update(batches)
     .set({
@@ -142,8 +150,9 @@ async function refreshCounts(batchId: string) {
       approvedCount: n("approved"),
       failedCount: n("failed"),
       updatedAt: new Date(),
+      ...(done ? { status: "ready" as const } : {}),
     })
-    .where(eq(batches.id, batchId));
+    .where(done ? and(eq(batches.id, batchId), eq(batches.status, "processing")) : eq(batches.id, batchId));
 }
 
 /** The batch a set belongs to, and its current status — what every verdict below has to read first. */
@@ -199,7 +208,7 @@ export async function approveSetsAction(ids: string[]): Promise<ActionResult<{ a
 export async function rejectSetAction(id: string): Promise<ActionResult<null>> {
   return action(async () => {
     const row = await loadSet(id);
-    if (row.status === "queued" || row.status === "processing") fail("Set ini masih diproses.");
+    if (isUnderway(row.status)) fail("Set ini masih diproses.");
     await db
       .update(sets)
       .set({ status: "rejected", updatedAt: new Date() })
@@ -219,13 +228,32 @@ export async function rejectSetAction(id: string): Promise<ActionResult<null>> {
  * The row goes back to `queued` with its error and member previews cleared, the batch is reopened
  * to `processing` (a tick refuses to work on a batch that is already `ready`), and a fresh chain is
  * kicked. The note the shop typed has no column of its own yet, so it is kept on `input.note`,
- * where a later pass over the prompt can pick it up; nothing reads it today.
+ * where a later pass over the prompt can pick it up; nothing reads it today. An empty note clears
+ * whatever note was stored before, so a second attempt is not silently steered by the first.
+ *
+ * A set a tick may still be holding is refused, exactly as `rejectSetAction` refuses one: this is a
+ * public POST, and the button being disabled in the gallery guarantees nothing. Requeueing a
+ * claimed row would either have that tick's write-back undo the requeue, or let a second tick claim
+ * the row and render — and bill for — the same set twice. A batch that has moved on to an export is
+ * refused too, for the same reason the tick route will not reopen one.
  */
 export async function regenerateSetAction(id: string, note?: string): Promise<ActionResult<null>> {
   return action(async () => {
     const row = await loadSet(id);
+    if (isUnderway(row.status)) fail("Set ini masih diproses.");
+
+    const batch = row.batchId
+      ? await db.query.batches.findFirst({ where: eq(batches.id, row.batchId) }).catch(e => fail("Gagal membaca batch.", e))
+      : undefined;
+    if (batch && (batch.status === "exporting" || batch.status === "exported")) {
+      fail("Batch ini sudah diekspor. Buat batch baru kalau mau menggambar ulang.");
+    }
+
     const trimmed = note?.trim() ?? "";
-    const input = { ...row.input, ...(trimmed === "" ? {} : { note: trimmed }) };
+    // Rebuilt rather than patched: leaving the key out is how an empty note erases the previous one.
+    const input: typeof row.input & { note?: string } = { ...row.input };
+    delete input.note;
+    if (trimmed !== "") input.note = trimmed;
     await db
       .update(sets)
       .set({
@@ -239,6 +267,8 @@ export async function regenerateSetAction(id: string, note?: string): Promise<Ac
       .catch(e => fail("Gagal menjadwalkan ulang set ini.", e));
 
     if (row.batchId) {
+      // Reopened first, so the `refreshCounts` below — which closes a batch with nothing left to do
+      // — sees the set that was just queued and leaves the batch open for the tick.
       await db.update(batches).set({ status: "processing", updatedAt: new Date() }).where(eq(batches.id, row.batchId));
       await refreshCounts(row.batchId);
       kickTick(await requestOrigin(), row.batchId);
@@ -283,6 +313,10 @@ export async function resumeBatchAction(id: string): Promise<ActionResult<{ rema
     if (remaining > 0 && batch.status !== "processing") {
       await db.update(batches).set({ status: "processing", updatedAt: new Date() }).where(eq(batches.id, id));
     }
+    // Nothing left to do: this is the wedged batch the button exists for — a tick died before its
+    // own roll-up and left the batch open with no work in it. Close it here rather than leave it
+    // open forever; `refreshCounts` re-reads the counts and applies the same verdict.
+    if (remaining === 0) await refreshCounts(id);
     if (remaining > 0) kickTick(await requestOrigin(), id);
     revalidatePath(`/batch/${id}`);
     return { remaining, requeued: rescued.length };
