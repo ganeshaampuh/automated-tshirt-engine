@@ -46,3 +46,12 @@ export async function deleteBlob(url: string): Promise<void> {
     console.error("[blob] could not delete", url, e instanceof Error ? e.message : e);
   }
 }
+
+/**
+ * Best-effort cleanup for a whole row's worth of files. Nulls are skipped, every delete is tried
+ * even if an earlier one failed, and nothing here can throw: the rows these files belonged to are
+ * already gone, so a file left behind is the only remaining cost of giving up.
+ */
+export async function deleteBlobs(urls: (string | null | undefined)[]): Promise<void> {
+  await Promise.all(urls.filter((u): u is string => typeof u === "string" && u !== "").map(deleteBlob));
+}

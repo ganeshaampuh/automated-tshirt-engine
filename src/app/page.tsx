@@ -2,6 +2,8 @@ import Link from "next/link";
 import { desc } from "drizzle-orm";
 import { SetInputSchema } from "@/engine";
 import { db, schema } from "@/db";
+import { RowDelete } from "@/app/components/RowDelete";
+import { ToastHost } from "@/app/components/ui";
 import { type BatchStatus, type SetStatus } from "@/lib/memberState";
 
 export const dynamic = "force-dynamic";
@@ -43,92 +45,102 @@ export default async function Home() {
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 py-14">
-      <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-[26px] leading-tight font-medium">Kaos Ulang Tahun</h1>
-          <p className="mt-1 text-[14px] text-muted">Nama anak, umur, dan tema jadi desain siap cetak untuk seluruh keluarga.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/batch/new"
-            className="rounded-[var(--radius-ctl)] border border-rule bg-panel px-4 py-2 font-display text-[14px] text-ink transition-colors hover:bg-bench"
-          >
-            Batch dari CSV
-          </Link>
-          {/* A POST, not a link: opening this URL writes a draft row. */}
-          <form action="/set/new" method="post">
-            <button
-              type="submit"
-              className="rounded-[var(--radius-ctl)] bg-tape px-4 py-2 font-display text-[14px] text-ink transition-colors hover:bg-tape-dark hover:text-white"
+    // The lists are server-rendered; `ToastHost` is here so each row's delete has somewhere to
+    // report what happened, and is the only client boundary the page opens.
+    <ToastHost>
+      <div className="mx-auto w-full max-w-3xl px-6 py-14">
+        <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="font-display text-[26px] leading-tight font-medium">Kaos Ulang Tahun</h1>
+            <p className="mt-1 text-[14px] text-muted">Nama anak, umur, dan tema jadi desain siap cetak untuk seluruh keluarga.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/batch/new"
+              className="rounded-[var(--radius-ctl)] border border-rule bg-panel px-4 py-2 font-display text-[14px] text-ink transition-colors hover:bg-bench"
             >
-              Buat set baru
-            </button>
-          </form>
-        </div>
-      </header>
+              Batch dari CSV
+            </Link>
+            {/* A POST, not a link: opening this URL writes a draft row. */}
+            <form action="/set/new" method="post">
+              <button
+                type="submit"
+                className="rounded-[var(--radius-ctl)] bg-tape px-4 py-2 font-display text-[14px] text-ink transition-colors hover:bg-tape-dark hover:text-white"
+              >
+                Buat set baru
+              </button>
+            </form>
+          </div>
+        </header>
 
-      {batchRows.length > 0 && (
-        <section className="mb-10">
-          <h2 className="font-display text-[15px]">Batch</h2>
-          <p className="mt-0.5 mb-3 text-[13px] text-muted">Banyak set sekaligus dari satu file CSV.</p>
-          <ul className="border-t border-rule">
-            {batchRows.map(batch => (
-              <li key={batch.id} className="border-b border-rule">
-                <Link href={`/batch/${batch.id}`} className="flex items-baseline gap-3 px-1 py-3 transition-colors hover:bg-panel">
-                  <span className="truncate font-display text-[15px]">{batch.name}</span>
-                  <span className="shrink-0 text-[13px] text-muted">
-                    {batch.setCount} set, {batch.readyCount} siap, {batch.approvedCount} disetujui
-                    {batch.failedCount > 0 && `, ${batch.failedCount} gagal`}
-                  </span>
-                  <span className="ml-auto shrink-0 text-[12px] text-muted">{batchStatusLabel(batch.status)}</span>
-                  <span className="w-[104px] shrink-0 text-right font-mono text-[12px] text-muted tabular-nums">
-                    {when(batch.updatedAt)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section>
-        <h2 className="font-display text-[15px]">Set</h2>
-        <p className="mt-0.5 mb-3 text-[13px] text-muted">Satu ulang tahun, satu desain per anggota keluarga.</p>
-        {rows.length === 0 ? (
-          <p className="border border-dashed border-rule px-4 py-10 text-center text-[14px] text-muted">
-            Belum ada set. Mulai dari nama anak dan temanya.
-          </p>
-        ) : (
-          <ul className="border-t border-rule">
-            {rows.map(row => {
-              const parsed = SetInputSchema.safeParse(row.input);
-              const input = parsed.success ? parsed.data : null;
-              return (
-                <li key={row.id} className="border-b border-rule">
-                  <Link href={`/set/${row.id}`} className="flex items-baseline gap-3 px-1 py-3 transition-colors hover:bg-panel">
-                    {input && (
-                      <span
-                        aria-hidden
-                        className="size-3 self-center rounded-full border border-rule"
-                        style={{ background: input.shirtColor }}
-                      />
-                    )}
-                    <span className="font-display text-[15px]">{input?.kidName ?? "Data rusak"}</span>
-                    {input && (
-                      <span className="text-[13px] text-muted">
-                        {input.age} tahun, {input.members.length} kaos
-                      </span>
-                    )}
-                    <span className="ml-auto text-[12px] text-muted">{statusLabel(row.status)}</span>
-                    <span className="w-[104px] text-right font-mono text-[12px] text-muted tabular-nums">{when(row.updatedAt)}</span>
+        {batchRows.length > 0 && (
+          <section className="mb-10">
+            <h2 className="font-display text-[15px]">Batch</h2>
+            <p className="mt-0.5 mb-3 text-[13px] text-muted">Banyak set sekaligus dari satu file CSV.</p>
+            <ul className="border-t border-rule">
+              {batchRows.map(batch => (
+                // The delete sits beside the link, never inside it: one is a navigation, the other
+                // cannot be undone, and a click must never be able to do both.
+                <li key={batch.id} className="flex items-center gap-2 border-b border-rule pr-1">
+                  <Link href={`/batch/${batch.id}`} className="flex flex-1 items-baseline gap-3 overflow-hidden px-1 py-3 transition-colors hover:bg-panel">
+                    <span className="truncate font-display text-[15px]">{batch.name}</span>
+                    <span className="shrink-0 text-[13px] text-muted">
+                      {batch.setCount} set, {batch.readyCount} siap, {batch.approvedCount} disetujui
+                      {batch.failedCount > 0 && `, ${batch.failedCount} gagal`}
+                    </span>
+                    <span className="ml-auto shrink-0 text-[12px] text-muted">{batchStatusLabel(batch.status)}</span>
+                    <span className="w-[104px] shrink-0 text-right font-mono text-[12px] text-muted tabular-nums">
+                      {when(batch.updatedAt)}
+                    </span>
                   </Link>
+                  <RowDelete kind="batch" id={batch.id} name={batch.name} status={batch.status} />
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          </section>
         )}
-      </section>
-    </div>
+
+        <section>
+          <h2 className="font-display text-[15px]">Set</h2>
+          <p className="mt-0.5 mb-3 text-[13px] text-muted">Satu ulang tahun, satu desain per anggota keluarga.</p>
+          {rows.length === 0 ? (
+            <p className="border border-dashed border-rule px-4 py-10 text-center text-[14px] text-muted">
+              Belum ada set. Mulai dari nama anak dan temanya.
+            </p>
+          ) : (
+            <ul className="border-t border-rule">
+              {rows.map(row => {
+                const parsed = SetInputSchema.safeParse(row.input);
+                const input = parsed.success ? parsed.data : null;
+                return (
+                  <li key={row.id} className="flex items-center gap-2 border-b border-rule pr-1">
+                    <Link href={`/set/${row.id}`} className="flex flex-1 items-baseline gap-3 overflow-hidden px-1 py-3 transition-colors hover:bg-panel">
+                      {input && (
+                        <span
+                          aria-hidden
+                          className="size-3 self-center rounded-full border border-rule"
+                          style={{ background: input.shirtColor }}
+                        />
+                      )}
+                      <span className="font-display text-[15px]">{input?.kidName ?? "Data rusak"}</span>
+                      {input && (
+                        <span className="text-[13px] text-muted">
+                          {input.age} tahun, {input.members.length} kaos
+                        </span>
+                      )}
+                      <span className="ml-auto text-[12px] text-muted">{statusLabel(row.status)}</span>
+                      <span className="w-[104px] text-right font-mono text-[12px] text-muted tabular-nums">{when(row.updatedAt)}</span>
+                    </Link>
+                    {/* "Data rusak" is the name when the input will not parse — a row in exactly that
+                        state is the one a shop most wants to be able to throw away. */}
+                    <RowDelete kind="set" id={row.id} name={input?.kidName ?? "Set ini"} status={row.status} />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
+    </ToastHost>
   );
 }

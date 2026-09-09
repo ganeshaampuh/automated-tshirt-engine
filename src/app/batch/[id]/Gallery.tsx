@@ -2,14 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { approveSetsAction, exportBatchAction, regenerateSetAction, rejectSetAction, resumeBatchAction } from "@/app/actions/batches";
+import {
+  approveSetsAction,
+  deleteBatchAction,
+  deleteSetsAction,
+  exportBatchAction,
+  regenerateSetAction,
+  rejectSetAction,
+  resumeBatchAction,
+} from "@/app/actions/batches";
 import { ToastHost, useAction, useToast } from "@/app/components/ui";
 import type { SetInput } from "@/engine";
 import type { MemberStates } from "@/lib/memberState";
 import { GalleryActions } from "./components/GalleryActions";
 import { SetCard } from "./components/SetCard";
 import { StatusBar } from "./components/StatusBar";
-import { approvable, exportRetryable, galleryCounts, isBusy, statusSignature } from "./galleryRules";
+import { approvable, deletable, exportRetryable, galleryCounts, isBusy, statusSignature } from "./galleryRules";
 
 /** What one card needs from a row; the page hands over nothing else. */
 export type GallerySet = {
@@ -115,6 +123,27 @@ function Board({ batchId, name, batchStatus, updatedAt, zipUrl, batchError, sets
 
   // A set that moved on — approved elsewhere, failed on a retry — must not stay ticked.
   const selected = useMemo(() => approvable(picked, sets), [picked, sets]);
+  // The same boxes read by the wider rule: a delete may take any settled set, not just a ready one.
+  const removable = useMemo(() => deletable(picked, sets), [picked, sets]);
+
+  /**
+   * Deletes sets and drops them from the selection.
+   *
+   * `router.refresh()` is what makes the cards disappear: the rows are gone from the database and
+   * the page is server-rendered from them. The picks are cleared first so a box that outlived its
+   * card cannot be carried into the next action.
+   */
+  const remove = (ids: string[], key: string) =>
+    run(key, async () => {
+      const res = await deleteSetsAction(ids);
+      if (!res.ok) return res;
+      setPicked(prev => prev.filter(id => !ids.includes(id)));
+      const { deleted } = res.data;
+      // Zero is not a no-op worth staying silent about: it means every id lost the race — the set
+      // was requeued, or another tab deleted it — and the card is about to vanish or come back.
+      show(deleted === 0 ? "Tidak ada set yang bisa dihapus sekarang." : `${deleted} set dihapus.`, deleted === 0 ? "bad" : "ok");
+      router.refresh();
+    });
 
   const approve = (ids: string[], key: string) =>
     run(key, async () => {
@@ -134,6 +163,15 @@ function Board({ batchId, name, batchStatus, updatedAt, zipUrl, batchError, sets
         notice={batchError}
         stuck={stuck}
         resuming={pending === "resume"}
+        deleting={pending === "delete-batch"}
+        onDelete={() =>
+          run("delete-batch", async () => {
+            const res = await deleteBatchAction(batchId);
+            if (!res.ok) return res;
+            // Home, not `refresh`: this page's own row is gone and rendering it again would 404.
+            router.push("/");
+          })
+        }
         onResume={() =>
           run("resume", async () => {
             const res = await resumeBatchAction(batchId);
@@ -160,7 +198,9 @@ function Board({ batchId, name, batchStatus, updatedAt, zipUrl, batchError, sets
           readyCount={counts.ready}
           approvedCount={counts.approved}
           selected={selected.length}
+          removable={removable.length}
           pending={pending === "approve-selected"}
+          deleting={pending === "delete-selected"}
           exporting={exporting}
           exportStale={exportStale}
           zipUrl={zipUrl}
@@ -179,6 +219,7 @@ function Board({ batchId, name, batchStatus, updatedAt, zipUrl, batchError, sets
           onSelectAll={() => setPicked(sets.filter(s => s.status === "ready").map(s => s.id))}
           onClear={() => setPicked([])}
           onApprove={() => approve(selected, "approve-selected")}
+          onDelete={() => remove(removable, "delete-selected")}
         />
 
         <div className="space-y-3 pt-3">
@@ -198,6 +239,7 @@ function Board({ batchId, name, batchStatus, updatedAt, zipUrl, batchError, sets
                   router.refresh();
                 })
               }
+              onDelete={() => remove([row.id], `delete:${row.id}`)}
               onRegenerate={note =>
                 run(`regen:${row.id}`, async () => {
                   const res = await regenerateSetAction(row.id, note);
