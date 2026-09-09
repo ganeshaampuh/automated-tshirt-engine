@@ -1,5 +1,7 @@
 # Kaos Ulang Tahun — family birthday shirt set generator
 
+[![CI](https://github.com/ganeshaampuh/automated-tshirt-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/ganeshaampuh/automated-tshirt-engine/actions/workflows/ci.yml)
+
 An internal tool for a print/merch shop that produces **matching family birthday shirt sets**.
 One *set* is one birthday child (name, age, theme) plus the family members who get a shirt.
 The app turns that into one print-ready front-chest PNG per member, previews each on a shirt
@@ -30,12 +32,9 @@ Work is split into three implementation plans under `docs/superpowers/plans/`:
    with a Playwright parity test against the server renderer, the Z.ai provider wrapper, Neon
    Postgres (Drizzle) + Vercel Blob persistence, server actions, and the single-set editor at
    `/set/[id]`.
-3. **CSV batch** — not written yet. It picks up from the interfaces plan 2 produced, listed at
-   the bottom of plan 2 under *What plan 3 consumes*: the `batches` table and
-   `sets.batchId/status/previewUrls`, `generateClipart`/`describeClipart`/`chooseStyle` with
-   mocked-provider tests, `exportSetZip` per set, `renderMockup` at 600 px for gallery previews,
-   `SetInputSchema` for CSV row validation, and the `/set/[id]` editor as the gallery's "Edit"
-   action.
+3. **CSV batch** (`2026-09-09-03-csv-batch.md`) — done. A guarded door for every remote image, CI,
+   per-member state, the CSV parser, batch creation, the self-chaining processing route, the review
+   gallery and the streaming ZIP export. See [Batch](#batch) below for how to drive it.
 
 ## Setup
 
@@ -54,6 +53,13 @@ vercel env pull .env.local --environment=development
 ```
 
 Then `pnpm dev` and open http://localhost:3000.
+
+> [!WARNING]
+> **Production, preview and development currently share one Neon database.** `vercel env pull`
+> hands your laptop the same `DATABASE_URL` the shop's deployment uses, so a local batch run writes
+> batches and sets the shop sees, and `pnpm db:migrate` migrates production. Until the branches are
+> split (see [Known limitations](#known-limitations) for the click-path), treat every local run as a
+> production write: use the smallest CSV that proves the point, and reject or delete what you make.
 
 To run migrations against production, pull production env to a throwaway file, run, and delete it:
 
@@ -82,7 +88,7 @@ Model ids and the base URL live only in `src/ai/config.ts`. Never log any of the
 | `pnpm build` / `pnpm start` | Production build and server. |
 | `pnpm lint` | ESLint (flat config, `eslint-config-next`). |
 | `pnpm test` | Vitest, the whole unit/integration suite. |
-| `pnpm test:e2e` | Playwright (`e2e/`): the browser↔server render parity test and the editor smoke test. |
+| `pnpm test:e2e` | Playwright (`e2e/`): the browser↔server render parity test, the editor smoke test, and the batch road (`batch.spec.ts`). The last two need `DATABASE_URL` and skip without it. |
 | `pnpm db:generate` | Drizzle Kit: generate a migration from `src/db/schema.ts` into `drizzle/`. |
 | `pnpm db:migrate` | Apply pending migrations to `DATABASE_URL`. |
 | `pnpm db:studio` | Drizzle Studio against `DATABASE_URL`. |
@@ -98,6 +104,83 @@ env loaded:
 ```bash
 pnpm dlx dotenv-cli -e .env.local -- pnpm test tests/db
 ```
+
+## Batch
+
+One CSV in, one ZIP of print-ready PNGs out. `/batch/new` takes the file, `/batch/[id]` is the
+review gallery.
+
+### The CSV
+
+The first row is the header. Column order is free and unknown columns are ignored.
+
+| Column | Required | What it holds |
+| --- | --- | --- |
+| `kid_name` | yes | The birthday child's name. |
+| `age` | yes | Whole number, 0–120. It also decides the child's size class (≤1 → `kids-0-1`, ≤9 → `kids-1-9`, else `adult`). |
+| `theme` | yes | Free text, e.g. `unicorn pastel`. Drives the clipart and the style. |
+| `members` | yes | `Nama:ukuran` tokens separated by `;`. Size is `adult`, `kids-0-1`, `kids-1-9`, or `kid` for the birthday child — **exactly one** `kid` per row. Quote the cell if it contains a comma. |
+| `language` | no | `id` or `en`. Empty means `id`. |
+| `shirt_color` | no | Hex (`#ffffff`) or a name from `src/lib/shirtColors.ts` (`putih`, `navy`, `hitam`, …). Empty means white. |
+| `clipart_url` | no | Skips AI clipart generation for that row. **`https://` only, and the host must be publicly resolvable** — see below. A `data:image/…` URI works too. |
+| `sku_prefix` | no | Names the set's folder in the ZIP. Empty means the kid's name, which two families can share. |
+
+`tests/fixtures/batch-sample.csv` is the worked example — 3 sets, 10 shirts:
+
+```csv
+kid_name,age,theme,members,language,shirt_color,sku_prefix
+Keisya,5,unicorn pastel,Ayah:adult;Mama:adult;Kenzi:kids-1-9;Keisya:kid,id,#ffffff,KEI
+Bima,1,dinosaurus,"Ayah:adult;Bunda:adult;Bima:kid",id,navy,BIM
+Nadia,11,luar angkasa,Papa:adult;Mama:adult;Nadia:kid,en,hitam,
+```
+
+**Caps: 200 sets and 1000 shirts per file** (`MAX_SETS` / `MAX_MEMBERS` in `src/lib/csv.ts`), and
+8 MB of CSV. "Periksa" is a dry run that writes nothing; a batch is only created when every row is
+clean, so you never get half the rows you uploaded.
+
+**`clipart_url` is fetched through the guarded door** in `src/lib/remoteImage.ts`, because it is an
+address out of a spreadsheet: https only, no credentials in the URL, port 443 only, the host must
+resolve entirely to public address space (loopback, private ranges and the cloud metadata address
+are refused), the check is repeated after every redirect, at most 3 redirects, a 15 s timeout, and
+the body is capped at 16 MB while it streams. An image behind a login, on an intranet host, or
+served over http will fail the row with a reason on its card — that is the guard working, not a bug.
+
+### How processing runs
+
+Creating a batch queues its sets and fires `POST /api/batch/[id]/tick`. Each tick claims up to 3
+sets, draws them (clipart → describe → style → a 600 px mockup per member), writes the results, and
+then **calls itself again** if anything is left. Vercel caps a function at 300 s, so the chain of
+short hops is what lets a 200-set batch finish. The gallery polls every 3 s while anything is
+`queued` or `processing`.
+
+**"Lanjutkan"** is the manual restart. A tick that dies mid-set leaves its rows claimed in
+`processing`, where no later tick will pick them up; a tick that dies before its roll-up leaves the
+batch open with nothing left to do. "Lanjutkan" requeues claims older than 10 minutes, starts a
+fresh chain, and closes a batch that is already finished. The gallery offers it whenever work is
+outstanding, and says so loudly once nothing has changed for ten minutes.
+
+One member's render failure is that member's failure: the card keeps the rest of the family and
+badges the broken one. A whole set fails only when its clipart or style cannot be had, and the card
+then carries the reason in Indonesian.
+
+### Export
+
+Approve the sets you want ("Setujui" per card, or tick several and use "Setujui terpilih"), then
+"Buat ZIP". The export streams straight into Blob storage while it renders, so nothing accumulates
+in memory, and the gallery shows "Unduh ZIP" when the file is there. Layout:
+
+```
+KEI/Ayah.png          # <sku_prefix or kid_name>/<member label>.png
+KEI/Mama.png          # 300 DPI, transparent, cropped to the artwork + 1% margin
+KEI/Keisya.png
+BIM/Bima.png
+report.csv            # set_id, folder, kid_name, member, status, error — one row per member
+```
+
+`report.csv` is the audit trail: every member that made it, every one that did not and why, and a
+`truncated` row if the export ran out of time. Read it before sending anything to print — a ZIP with
+holes still looks like a ZIP. Only approved sets are exported; the batch ZIP holds print PNGs only
+(the per-set export at `/set/[id]` is the one that also gives you mockup JPEGs).
 
 ## Golden-image tests
 
@@ -159,6 +242,26 @@ exercise Vercel's file tracing — a local server reads the whole repo from disk
 
 ## Known limitations
 
+- **One database for all three environments.** Production, preview and development share the Neon
+  project `neon-cinnabar-mirror`, so a local `pnpm dev` writes rows the shop's deployment shows and
+  `pnpm db:migrate` migrates production. Splitting it needs the Neon console and cannot be done from
+  a CLI here: the project is Vercel-marketplace-managed (`vercel integration-resource inspect
+  neon-cinnabar-mirror` shows it connected to production, preview *and* development), and `neonctl`
+  only authenticates through an interactive browser flow. The click-path: open
+  <https://vercel.com/ganeshaampuh/~/stores/integration/store_zl4jKxlLxoYITybV> → **Open in Neon** →
+  **Branches** → **New Branch** from the default branch, named `preview`, then again named
+  `development`. Copy each branch's *pooled* connection string,
+  then per environment `vercel env rm DATABASE_URL preview` / `vercel env add DATABASE_URL preview`
+  (and the same for `development`), `vercel env pull .env.local`, and `pnpm db:migrate` to put the
+  schema on the development branch.
+- **An export much above ~120 sets comes back truncated.** The ZIP is one upload and cannot be split
+  across function invocations, so it lives inside Vercel's 300 s ceiling: the exporter stops taking
+  new sets 45 s before the deadline, closes a valid ZIP, writes a `truncated` row into `report.csv`
+  and warns in the gallery header. At the measured ~2 s a set that lands somewhere past a hundred
+  sets — well under the 200 the parser allows. Approving and exporting in slices is the workaround;
+  part-ZIPs (`part-1.zip`, `part-2.zip`, each with its own report) are the follow-up.
+- **The batch ZIP has no mockups.** It carries print PNGs and `report.csv` only. Mockup JPEGs come
+  from the single-set export at `/set/[id]`.
 - `layerBounds()` is an ink-aware but conservative *envelope*, not a per-glyph trace: a text
   layer's box is `maxWidth` × `size · lines · (1 + DESCENDER_RATIO)` grown by the stroke width, so
   a line with no descender reserves height it does not use. Safe-area checks and reported cm sizes
