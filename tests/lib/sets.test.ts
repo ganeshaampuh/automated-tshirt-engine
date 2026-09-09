@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { unzipSync } from "fflate";
 import { exportSetZip, guardRemoteImages, newByteCache } from "@/lib/sets";
 import { fetchRemoteImage, RemoteImageError } from "@/lib/remoteImage";
@@ -85,9 +86,23 @@ describe("exportSetZip", () => {
       .rejects.toThrow(/tidak diizinkan/i);
   }, 120_000);
 
-  it("refuses an export whose member override points a layer at a server file", async () => {
+  it("refuses a member override that points a layer at a readable image on the server", async () => {
+    // The path has to be a *decodable* image that really exists: pre-fix, this file would have been
+    // read and embedded in the ZIP the shop downloads, which is the whole exploit. Something like
+    // /etc/passwd would make this test pass for the wrong reason — the decoder rejects an
+    // undecodable file on its own, guard or no guard. Absolute, so the allowed-prefix list (which
+    // contains the relative "tests/fixtures/") cannot be what saves us.
+    const leak = path.resolve("tests/fixtures/unicorn.png");
+    const load = vi.fn(loadImageFromFile);
     const set = unicornSet();
-    set.input.members[1].overrides = { clipart: { src: "/etc/passwd" } };
-    await expect(exportSetZip(set, { measure: createNodeMeasurer(), clipartSize: CLIPART_SIZE, loadImage: loadImageFromFile })).rejects.toThrow();
+    set.input.members[1].overrides = { clipart: { src: leak } };
+    // The schema stops it first, before a single layer is rendered.
+    await expect(exportSetZip(set, { measure: createNodeMeasurer(), clipartSize: CLIPART_SIZE, loadImage: load })).rejects.toThrow();
+    expect(load).not.toHaveBeenCalled();
+    // And the last gate refuses the same path by type, for both spellings of it.
+    const guarded = guardRemoteImages(load);
+    await expect(guarded(leak)).rejects.toBeInstanceOf(RemoteImageError);
+    await expect(guarded("public/../tests/fixtures/unicorn.png")).rejects.toBeInstanceOf(RemoteImageError);
+    expect(load).not.toHaveBeenCalled();
   }, 120_000);
 });
