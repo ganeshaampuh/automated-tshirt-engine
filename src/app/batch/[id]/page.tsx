@@ -29,5 +29,5 @@ export default async function BatchPage({ params }: PageProps<"/batch/[id]">) {
     // after each verdict, and the cards would shuffle under the shop's cursor between polls.
     .orderBy(asc(schema.sets.createdAt), asc(schema.sets.id));
 
-  return <Gallery batchId={batch.id} name={batch.name} batchStatus={batch.status} sets={rows satisfies GallerySet[]} />;
+  return <Gallery batchId={batch.id} name={batch.name} batchStatus={batch.status} zipUrl={batch.zipUrl} sets={rows satisfies GallerySet[]} />;
 }

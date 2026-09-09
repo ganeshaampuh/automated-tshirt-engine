@@ -12,8 +12,14 @@ import { tickOrigin } from "@/lib/tickOrigin";
 const { batches, sets } = schema;
 
 export const dynamic = "force-dynamic";
-/** Three sets of AI calls and mockups per tick; the chain, not one invocation, does the long haul. */
-export const maxDuration = 60;
+/**
+ * Three sets of AI calls and mockups per tick; the chain, not one invocation, does the long haul.
+ * The budget itself lives beside `TICK_BATCH` in `processSet.ts`, where the resume's stale-claim
+ * window is derived from it — raising one alone would let a resume rob a live tick of its rows.
+ */
+// Next.js reads this without running the file, so it has to be a literal; `TICK_MAX_SECONDS` in
+// `processSet.ts` is the value it must equal, and `tests/app/gallery.test.ts` fails if it drifts.
+export const maxDuration = 300;
 
 /**
  * The AI provider, or one that fails every call.

@@ -12,6 +12,7 @@ import { deleteBlob, putBlob } from "@/lib/blob";
 import { rowsToInserts } from "@/lib/batchInserts";
 import { parseBatchRows, type ParsedRow, type RowError } from "@/lib/csv";
 import { initialStates } from "@/lib/memberState";
+import { STALE_CLAIM_MINUTES, TICK_MAX_SECONDS } from "@/lib/processSet";
 import { tickOrigin } from "@/lib/tickOrigin";
 import { MAX_CSV_MESSAGE, MAX_UPLOAD_BYTES } from "@/lib/upload";
 
@@ -65,16 +66,21 @@ async function requestOrigin(): Promise<string> {
  * "Lanjutkan" button starts a fresh chain. Creation must not fail because the tick did.
  */
 function kickTick(origin: string, id: string) {
+  kick(origin, id, "tick");
+}
+
+/** Fires one of this batch's long routes and forgets it; the database carries the result. */
+function kick(origin: string, id: string, route: "tick" | "export") {
   if (origin === "") {
-    console.error(`[batches] no origin for the tick of ${id}; it waits for a manual resume`);
+    console.error(`[batches] no origin for the ${route} of ${id}; it waits for a manual resume`);
     return;
   }
   waitUntil(
-    fetch(`${origin}/api/batch/${id}/tick`, { method: "POST" }).then(
+    fetch(`${origin}/api/batch/${id}/${route}`, { method: "POST" }).then(
       res => {
-        if (!res.ok) console.error(`[batches] tick for ${id} answered ${res.status}`);
+        if (!res.ok) console.error(`[batches] ${route} for ${id} answered ${res.status}`);
       },
-      e => console.error(`[batches] tick for ${id} failed:`, e instanceof Error ? e.message : e),
+      e => console.error(`[batches] ${route} for ${id} failed:`, e instanceof Error ? e.message : e),
     ),
   );
 }
@@ -279,12 +285,6 @@ export async function regenerateSetAction(id: string, note?: string): Promise<Ac
 }
 
 /**
- * A claim older than this belongs to a tick that died, and is offered again. Five minutes is well
- * past the route's 60 s `maxDuration`, so no live tick can be robbed of a set it is still drawing.
- */
-const STALE_CLAIM_MINUTES = 5;
-
-/**
  * Restarts a chain that stopped — a tick that was cut off mid-flight, or a kick that never left.
  *
  * Stranded sets are rescued before anything else: rows a dead tick left in `processing` are put
@@ -320,5 +320,53 @@ export async function resumeBatchAction(id: string): Promise<ActionResult<{ rema
     if (remaining > 0) kickTick(await requestOrigin(), id);
     revalidatePath(`/batch/${id}`);
     return { remaining, requeued: rescued.length };
+  });
+}
+
+/**
+ * Starts the ZIP export of everything the shop approved.
+ *
+ * The work itself is a separate route, not this action: two hundred sets is minutes of rendering
+ * and a Server Action's answer is a response the browser is waiting on. So the batch is flipped to
+ * `exporting`, the route is kicked, and the gallery polls until a `zipUrl` appears — the same shape
+ * the processing chain already uses.
+ *
+ * The flip is the lock. It is written with the previous status in the `where`, so a second click,
+ * a double-submitted form or a retried kick finds nothing to update and starts no second render of
+ * the same two hundred sets. A batch still `processing` is refused outright: the tick only works on
+ * a `processing` batch, and taking that status away mid-chain would strand its queued sets.
+ */
+export async function exportBatchAction(id: string): Promise<ActionResult<{ started: boolean }>> {
+  return action(async () => {
+    const batch = await db.query.batches.findFirst({ where: eq(batches.id, id) }).catch(e => fail("Gagal membaca batch.", e));
+    if (!batch) fail("Batch ini tidak ada.");
+    if (batch.status === "processing") fail("Batch masih diproses, tunggu sampai selesai.");
+    // An export that was killed mid-stream never gets to write its own verdict, so `exporting` is
+    // the one status that can outlive the function holding it. Past twice the route's budget there
+    // is no such function left, and the button has to work again or the batch is stuck for good.
+    if (batch.status === "exporting" && Date.now() - batch.updatedAt.getTime() < TICK_MAX_SECONDS * 2000) {
+      return { started: false };
+    }
+
+    const [approved] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(sets)
+      .where(and(eq(sets.batchId, id), eq(sets.status, "approved")))
+      .catch(e => fail("Gagal membaca set batch ini.", e));
+    if ((approved?.n ?? 0) === 0) fail("Setujui minimal satu set dulu sebelum mengunduh ZIP.");
+
+    const claimed = await db
+      .update(batches)
+      // The old `zipUrl` is dropped as the new export starts: half an hour later the shop must not
+      // be handed yesterday's file believing it holds today's approvals.
+      .set({ status: "exporting", zipUrl: null, error: null, updatedAt: new Date() })
+      .where(and(eq(batches.id, id), eq(batches.status, batch.status)))
+      .returning({ id: batches.id })
+      .catch(e => fail("Gagal memulai ekspor.", e));
+    if (claimed.length === 0) return { started: false };
+
+    kick(await requestOrigin(), id, "export");
+    revalidatePath(`/batch/${id}`);
+    return { started: true };
   });
 }

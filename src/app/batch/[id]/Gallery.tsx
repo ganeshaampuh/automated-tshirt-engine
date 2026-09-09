@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { approveSetsAction, regenerateSetAction, rejectSetAction, resumeBatchAction } from "@/app/actions/batches";
+import { approveSetsAction, exportBatchAction, regenerateSetAction, rejectSetAction, resumeBatchAction } from "@/app/actions/batches";
 import { ToastHost, useAction, useToast } from "@/app/components/ui";
 import type { SetInput } from "@/engine";
 import type { MemberStates } from "@/lib/memberState";
@@ -28,12 +28,12 @@ const POLL_MS = 3000;
  *
  * A tick that died mid-set leaves its rows in `processing`, where no later tick will claim them:
  * the batch reports work forever and a plain "poll while busy" would hammer the database until the
- * tab is closed. Three minutes is several times the route's 60 s life, so a slow but living tick is
- * never mistaken for a dead one.
+ * tab is closed. Ten minutes is twice the route's 300 s life, so neither a tick that uses its whole
+ * budget nor an export rendering the last of two hundred sets is ever mistaken for a dead one.
  */
-const STUCK_MS = 3 * 60 * 1000;
+const STUCK_MS = 10 * 60 * 1000;
 
-type BoardProps = { batchId: string; name: string; batchStatus: string; sets: GallerySet[] };
+type BoardProps = { batchId: string; name: string; batchStatus: string; zipUrl: string | null; sets: GallerySet[] };
 
 export default function Gallery(props: BoardProps) {
   return (
@@ -43,18 +43,21 @@ export default function Gallery(props: BoardProps) {
   );
 }
 
-function Board({ batchId, name, batchStatus, sets }: BoardProps) {
+function Board({ batchId, name, batchStatus, zipUrl, sets }: BoardProps) {
   const router = useRouter();
   const { show } = useToast();
   const { pending, run } = useAction();
   const [picked, setPicked] = useState<string[]>([]);
 
   const counts = useMemo(() => galleryCounts(sets), [sets]);
-  const busy = isBusy(counts);
+  // An export is a long render on a route, so the page waits for it the same way it waits for the
+  // processing chain: by asking the server again until the batch carries a `zipUrl`.
+  const exporting = batchStatus === "exporting";
+  const busy = isBusy(counts) || exporting;
   const [stuck, setStuck] = useState(false);
 
   // When the last render showed something different from the one before it, work is alive.
-  const signature = useMemo(() => statusSignature(sets), [sets]);
+  const signature = useMemo(() => `${batchStatus}:${zipUrl ?? ""}|${statusSignature(sets)}`, [batchStatus, zipUrl, sets]);
   // `at: 0` means "not stamped yet": the clock is read in the effect below, never during a render.
   const lastChange = useRef({ signature, at: 0 });
   useEffect(() => {
@@ -122,8 +125,23 @@ function Board({ batchId, name, batchStatus, sets }: BoardProps) {
       <main className="mx-auto w-full max-w-6xl px-6 pb-16">
         <GalleryActions
           readyCount={counts.ready}
+          approvedCount={counts.approved}
           selected={selected.length}
           pending={pending === "approve-selected"}
+          exporting={exporting}
+          zipUrl={zipUrl}
+          onExport={() =>
+            run("export", async () => {
+              const res = await exportBatchAction(batchId);
+              if (!res.ok) return res;
+              show(res.data.started ? "Menyiapkan ZIP, tunggu sebentar." : "Ekspor sudah berjalan.", "ok");
+              // A start is a change: give the poll its full window again so it does not call the
+              // batch stuck while the export is still rendering.
+              lastChange.current = { signature: "", at: Date.now() };
+              setStuck(false);
+              router.refresh();
+            })
+          }
           onSelectAll={() => setPicked(sets.filter(s => s.status === "ready").map(s => s.id))}
           onClear={() => setPicked([])}
           onApprove={() => approve(selected, "approve-selected")}

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { strandedSets } from "@/db/claimSets";
+import { STALE_CLAIM_MINUTES, TICK_MAX_SECONDS } from "@/lib/processSet";
 import {
   approvable,
   galleryCounts,
@@ -156,5 +158,23 @@ describe("resumeOffered", () => {
   it("stays out of the way once the batch is closed", () => {
     expect(resumeOffered(galleryCounts(rows("ready", "approved")), "ready")).toBe(false);
     expect(resumeOffered(galleryCounts(rows("approved")), "exported")).toBe(false);
+  });
+});
+
+/**
+ * The rescue's safety argument in two files: a route's `maxDuration` and the age a resume calls a
+ * claim dead. Raising the budget without the window would let a resume requeue a set a live tick is
+ * still drawing, and the same set would be rendered — and billed — twice.
+ */
+describe("tick budget", () => {
+  it("keeps the stale-claim window at least twice the tick's own budget", () => {
+    expect(STALE_CLAIM_MINUTES * 60).toBeGreaterThanOrEqual(TICK_MAX_SECONDS * 2);
+  });
+
+  // Next.js reads a route's `maxDuration` without running the file, so it cannot be the imported
+  // constant; this is what keeps the copy honest.
+  it.each(["tick", "export"])("holds the %s route's maxDuration to that same budget", route => {
+    const src = readFileSync(`src/app/api/batch/[id]/${route}/route.ts`, "utf8");
+    expect(src).toContain(`export const maxDuration = ${TICK_MAX_SECONDS};`);
   });
 });

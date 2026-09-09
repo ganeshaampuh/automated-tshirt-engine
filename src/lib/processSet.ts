@@ -20,6 +20,26 @@ import { clipartSize, guardRemoteImages, newByteCache } from "@/lib/sets";
 /** Sets claimed per tick, matching spec §8.2 concurrency. */
 export const TICK_BATCH = 3;
 
+/**
+ * How long a tick is allowed to run, in seconds — the route's `maxDuration`.
+ *
+ * 300 s is Vercel's function ceiling on every plan, and a live tick of three sets was measured at
+ * 101 s: the previous 60 s would have killed it mid-set, leaving its claimed rows stranded in
+ * `processing` and every partial render paid for twice. `TICK_BATCH` stays at three rather than
+ * shrinking, because fewer sets per tick only buys more chain hops, each with its own cold start.
+ */
+export const TICK_MAX_SECONDS = 300;
+
+/**
+ * How old a claim must be before a resume calls it abandoned and requeues it.
+ *
+ * Derived from the budget rather than written down, because the two are one argument: a live tick's
+ * row can be as old as the whole budget, so a shorter window would let a resume hand a set to a
+ * second function while the first is still drawing it — the same set rendered, stored and billed
+ * twice. Twice the budget keeps that margin whatever the budget becomes.
+ */
+export const STALE_CLAIM_MINUTES = Math.ceil((TICK_MAX_SECONDS * 2) / 60);
+
 /** The width the gallery shows a member preview at (spec §8.2). */
 export const PREVIEW_WIDTH = 600;
 
