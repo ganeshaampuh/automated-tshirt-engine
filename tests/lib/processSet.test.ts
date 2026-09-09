@@ -111,6 +111,23 @@ describe("processSet", () => {
     for (const state of Object.values(out.memberStates)) expect(state.error).toBe(out.error);
   }, 60_000);
 
+  it("fetches a remote clipart exactly once for the whole set", async () => {
+    // The invariant `src/lib/sets.ts` states: one fetch per src per export. `describeClipart` used
+    // to be called without the set's `ByteCache` and re-fetched the very image `clipartSize` was
+    // about to read — two outbound requests per set, four hundred for a batch of two hundred, aimed
+    // at whatever host the spreadsheet named.
+    mockedFetch.mockReset();
+    mockedFetch.mockResolvedValue(unicornPng);
+    const src = "https://cdn.test/dino.png";
+    const out = await processSet(rowFor({ ...bima(), clipartSrc: src }), deps());
+
+    expect(out.status).toBe("ready");
+    // Three members, each of which loads the same clipart to draw its mockup, plus the describe and
+    // the size read: every one of those goes through the cache and only the first leaves.
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockedFetch).toHaveBeenCalledWith(src);
+  }, 60_000);
+
   it("falls back to a default style when the LLM keeps failing, and still finishes the set", async () => {
     const provider = fakeProvider({
       chatJSON: vi.fn(async () => {

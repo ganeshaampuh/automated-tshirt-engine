@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { z } from "zod";
 import type { AIProvider } from "./provider";
-import { fetchBytes } from "@/lib/sets";
+import { fetchBytes, type ByteCache } from "@/lib/sets";
 import { MAX_INPUT_PIXELS } from "@/lib/upload";
 import { clipartPrompt, describeSystem } from "./prompts";
 
@@ -42,10 +42,17 @@ export async function generateClipart(theme: string, deps: { provider: AIProvide
   return { url, width, height };
 }
 
-export async function describeClipart(src: string | Buffer, deps: { provider: AIProvider }): Promise<ClipartMeta> {
+export async function describeClipart(
+  src: string | Buffer,
+  // `cache` is the caller's per-set `ByteCache`. Without it this is a second fetch of the very src
+  // `clipartSize` is about to read — two outbound requests per set, four hundred for a batch of two
+  // hundred, at whatever host the spreadsheet named. `src/lib/sets.ts` states the invariant: one
+  // fetch per src per export.
+  deps: { provider: AIProvider; cache?: ByteCache },
+): Promise<ClipartMeta> {
   // A string src is a `clipartSrc`, which the shop (and, in batch mode, a spreadsheet) supplies:
   // read it through the same guarded door the exporter uses, never with a bare `fetch`.
-  const buf = Buffer.isBuffer(src) ? src : await fetchBytes(src);
+  const buf = Buffer.isBuffer(src) ? src : await fetchBytes(src, deps.cache);
   // Every decode of these bytes carries the upload pixel ceiling: `src` is attacker-chosen in batch
   // mode, and 16 MB of PNG can still unpack into gigabytes of raw pixels.
   const { width = 0, height = 0 } = await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();

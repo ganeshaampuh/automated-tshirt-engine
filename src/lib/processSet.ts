@@ -117,7 +117,7 @@ export async function processSet(row: ProcessRow, deps: ProcessDeps): Promise<Pr
   let style: SetStyle, aiFallback: boolean, ctx: TemplateContext;
   try {
     // Both reads go through the guarded door: in batch mode `src` came out of a spreadsheet.
-    const meta = await describeClipart(src, { provider: deps.provider });
+    const meta = await describeClipart(src, { provider: deps.provider, cache });
     const size = await clipartSize(src, cache);
     // `chooseStyle` answers with the fallback style rather than throwing when the LLM is down.
     ({ style, aiFallback } = await chooseStyle(input, { url: src, meta }, { provider: deps.provider }));
