@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportSetAction, generateClipartAction, generateStyleAction, saveSet, uploadClipartAction } from "@/app/actions/sets";
 import { CanvasPanel, type View } from "./components/CanvasPanel";
 import { InputsPanel } from "./components/InputsPanel";
@@ -9,7 +9,7 @@ import { Inspector } from "./components/Inspector";
 import { MemberTabs } from "./components/MemberTabs";
 import { SizeReadout } from "./components/SizeReadout";
 import { Button, ToastHost, useAction, useToast } from "@/app/components/ui";
-import { useSetEditor, type Initial, type LayerPatch, type Scope } from "./useSetEditor";
+import { useSetEditor, type Initial, type LayerPatch, type Move, type Scope } from "./useSetEditor";
 
 export default function SetEditor({ initial }: { initial: Initial }) {
   return (
@@ -31,6 +31,9 @@ function Editor({ initial }: { initial: Initial }) {
   const { show } = useToast();
   const editor = useSetEditor(initial, { save: saveSet, onError: show });
   const { state, dispatch, designs, design, unsafeIds, warning, error, selected, setSelected, memberId, setMemberId, status } = editor;
+  const { undo, redo, canUndo, canRedo } = editor;
+
+  useUndoRedoKeys(undo, redo);
 
   const [view, setView] = useState<View>("shirt");
   const [scope, setScope] = useState<Scope>("set");
@@ -43,6 +46,18 @@ function Editor({ initial }: { initial: Initial }) {
     (layerId: string, patch: LayerPatch) => dispatch({ type: "patchLayer", memberId, layerId, patch, scope }),
     [dispatch, memberId, scope],
   );
+
+  const onReorder = useCallback(
+    (layerId: string, move: Move) => {
+      if (!design) return;
+      // The rendered stack is the source of truth: a member with no stored order reorders from the
+      // template's, and one that has an order reorders from that.
+      dispatch({ type: "reorderLayer", memberId, layerId, move, ids: design.layers.map(l => l.id), scope });
+    },
+    [dispatch, design, memberId, scope],
+  );
+
+  useReorderKeys(selected, onReorder);
 
   const actions = useMemo(
     () => ({
@@ -81,6 +96,14 @@ function Editor({ initial }: { initial: Initial }) {
           {STATUS[status]}
         </span>
         <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center gap-0.5">
+            <Button variant="quiet" data-testid="undo" disabled={!canUndo} onClick={undo} title="Batalkan (⌘Z)" aria-label="Batalkan">
+              ↩
+            </Button>
+            <Button variant="quiet" data-testid="redo" disabled={!canRedo} onClick={redo} title="Ulangi (⇧⌘Z)" aria-label="Ulangi">
+              ↪
+            </Button>
+          </div>
           {warning && (
             <button
               data-testid="safe-area-warning"
@@ -144,9 +167,49 @@ function Editor({ initial }: { initial: Initial }) {
             selected={selected}
             onPatch={onPatch}
             onReset={layerId => dispatch({ type: "resetOverride", memberId, layerId })}
+            onReorder={onReorder}
           />
         </aside>
       </div>
     </div>
   );
+}
+
+/**
+ * ⌘Z / ⇧⌘Z (and Ctrl+Z / Ctrl+Y) anywhere on the page, text fields included: the inputs are
+ * controlled by the reducer, so the browser's own field-level undo cannot work there anyway, and one
+ * history for the whole editor is what a design tool is expected to have.
+ */
+function useUndoRedoKeys(undo: () => void, redo: () => void) {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === "z") {
+        e.preventDefault();
+        (e.shiftKey ? redo : undo)();
+      } else if (key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undo, redo]);
+}
+
+/** ⌘] / ⌘[ nudge the selected layer up and down the stack, the pair every design tool uses. */
+function useReorderKeys(selected: string | null, onReorder: (layerId: string, move: Move) => void) {
+  useEffect(() => {
+    if (!selected) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const move = e.key === "]" ? "forward" : e.key === "[" ? "backward" : null;
+      if (!move) return;
+      e.preventDefault();
+      onReorder(selected, move);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selected, onReorder]);
 }

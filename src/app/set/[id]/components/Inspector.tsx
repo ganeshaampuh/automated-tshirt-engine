@@ -1,7 +1,7 @@
 "use client";
 
 import { CURATED_FONTS, fontWeights, nearestWeight, type Design, type Layer, type Member } from "@/engine";
-import type { LayerPatch } from "../useSetEditor";
+import type { LayerPatch, Move } from "../useSetEditor";
 import { LAYER_LABEL, WEIGHT_LABEL } from "./labels";
 import { Button, Field, Section } from "@/app/components/ui";
 
@@ -42,20 +42,53 @@ function Color({ label, value, onChange }: { label: string; value: string; onCha
   );
 }
 
+/** Back to front, matching the draw order: the button furthest right puts the layer on top. */
+const MOVES: { move: Move; label: string; title: string }[] = [
+  { move: "back", label: "⤓", title: "Paling belakang" },
+  { move: "backward", label: "↓", title: "Mundur selapis (⌘[)" },
+  { move: "forward", label: "↑", title: "Maju selapis (⌘])" },
+  { move: "front", label: "⤒", title: "Paling depan" },
+];
+
+function Stacking({ index, count, onReorder }: { index: number; count: number; onReorder: (move: Move) => void }) {
+  return (
+    <Field label="Urutan lapisan" hint={`${index + 1} dari ${count}, dihitung dari belakang`}>
+      <div className="flex gap-1">
+        {MOVES.map(m => (
+          <Button
+            key={m.move}
+            data-testid={`move-${m.move}`}
+            title={m.title}
+            aria-label={m.title}
+            disabled={m.move === "back" || m.move === "backward" ? index === 0 : index === count - 1}
+            className="flex-1"
+            onClick={() => onReorder(m.move)}
+          >
+            {m.label}
+          </Button>
+        ))}
+      </div>
+    </Field>
+  );
+}
+
 export function Inspector({
   design,
   member,
   selected,
   onPatch,
   onReset,
+  onReorder,
 }: {
   design: Design | null;
   member: Member | undefined;
   selected: string | null;
   onPatch: (layerId: string, patch: LayerPatch) => void;
   onReset: (layerId: string) => void;
+  onReorder: (layerId: string, move: Move) => void;
 }) {
-  const layer: Layer | undefined = design?.layers.find(l => l.id === selected);
+  const index = design?.layers.findIndex(l => l.id === selected) ?? -1;
+  const layer: Layer | undefined = index < 0 ? undefined : design?.layers[index];
   if (!layer) {
     return (
       <Section title="Layer">
@@ -78,6 +111,10 @@ export function Inspector({
         ) : null
       }
     >
+      <div className="mb-3">
+        <Stacking index={index} count={design!.layers.length} onReorder={move => onReorder(layer.id, move)} />
+      </div>
+
       {layer.type === "image" ? (
         <div className="grid grid-cols-2 gap-2">
           <Num label="Kiri (px)" value={layer.x} onChange={x => set({ x })} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import {
   DEFAULT_FONT,
   SetInputSchema,
@@ -16,6 +16,7 @@ import {
   type Wording,
 } from "@/engine";
 import { useBrowserMeasurer } from "@/engine/render/browser/useBrowserMeasurer";
+import { initialHistory, withHistory } from "./history";
 import { UNEXPECTED_MESSAGE, type ActionResult } from "@/lib/actionResult";
 
 /** Layer fields an edit can write, in print px — the same shape `DesignStage` reports. */
@@ -23,6 +24,9 @@ export type LayerPatch = Partial<Omit<TextLayer, "id" | "type">> & Partial<Omit<
 
 /** "set" spreads an edit across every member (and into the shared style); "member" keeps it local. */
 export type Scope = "set" | "member";
+
+/** Where a reorder sends the layer, in the renderer's own direction: the last id is drawn on top. */
+export type Move = "front" | "forward" | "backward" | "back";
 
 export type EditorState = {
   id: string;
@@ -40,6 +44,7 @@ export type Action =
   | { type: "updateMember"; id: string; patch: Partial<Member> }
   | { type: "patchLayer"; memberId: string; layerId: string; patch: LayerPatch; scope: Scope }
   | { type: "resetOverride"; memberId: string; layerId: string }
+  | { type: "reorderLayer"; memberId: string; layerId: string; move: Move; ids: string[]; scope: Scope }
   | { type: "loaded"; style: SetStyle };
 
 export const STARTER_PALETTE = { primary: "#e6007e", secondary: "#f9a8d4", outline: "#e6007e" };
@@ -74,6 +79,19 @@ function syncWording(wording: Wording, prev: SetInput, next: SetInput): Wording 
 function withOverride(m: Member, layerId: string, patch: Record<string, unknown>): Member {
   if (!Object.keys(patch).length) return m;
   return { ...m, overrides: { ...m.overrides, [layerId]: { ...m.overrides?.[layerId], ...patch } } };
+}
+
+/**
+ * The stack after `layerId` makes `move`, or `null` when it is already at that end — the caller
+ * turns that into "no change", so a click at the end of the stack costs no undo step.
+ */
+export function moved(ids: readonly string[], layerId: string, move: Move): string[] | null {
+  const from = ids.indexOf(layerId);
+  if (from < 0) return null;
+  const to = move === "front" ? ids.length - 1 : move === "back" ? 0 : move === "forward" ? from + 1 : from - 1;
+  if (to === from || to < 0 || to > ids.length - 1) return null;
+  const rest = ids.filter(id => id !== layerId);
+  return [...rest.slice(0, to), layerId, ...rest.slice(to)];
 }
 
 function mapMembers(input: SetInput, ids: (m: Member) => boolean, f: (m: Member) => Member): SetInput {
@@ -153,6 +171,15 @@ export function reducer(state: EditorState, action: Action): EditorState {
       return { ...state, style, input: mapMembers(state.input, touched, m => withOverride(m, layerId, override)) };
     }
 
+    case "reorderLayer": {
+      // The order comes from the rendered stack the user is looking at, so a member with no stored
+      // order of its own reorders from the template's.
+      const order = moved(action.ids, action.layerId, action.move);
+      if (!order) return state;
+      const touched = action.scope === "set" ? () => true : (m: Member) => m.id === action.memberId;
+      return { ...state, input: mapMembers(state.input, touched, m => ({ ...m, order })) };
+    }
+
     case "resetOverride":
       return {
         ...state,
@@ -216,13 +243,16 @@ export type EditorDeps = {
 
 const AUTOSAVE_MS = 800;
 
+const historyReducer = withHistory(reducer);
+
 export function useSetEditor(initial: Initial, deps: EditorDeps = {}) {
-  const [state, dispatch] = useReducer(reducer, initial, i => ({
-    id: i.id,
-    input: i.input,
-    style: i.style,
-    memberId: i.input.members[0].id,
-  }));
+  const [history, dispatch] = useReducer(historyReducer, initial, i =>
+    initialHistory({ id: i.id, input: i.input, style: i.style, memberId: i.input.members[0].id }),
+  );
+  const state = history.present;
+  // Stable, so the editor's window-level keyboard listener is bound once rather than every render.
+  const undo = useCallback(() => dispatch({ type: "undo" }), []);
+  const redo = useCallback(() => dispatch({ type: "redo" }), []);
   const [selected, setSelected] = useState<string | null>(null);
   const measure = useBrowserMeasurer();
   const clipart = useImageSize(state.style?.clipartSrc ?? state.input.clipartSrc);
@@ -302,5 +332,9 @@ export function useSetEditor(initial: Initial, deps: EditorDeps = {}) {
     setSelected,
     memberId: state.memberId,
     setMemberId: (id: string) => dispatch({ type: "setMember", id }),
+    undo,
+    redo,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
   };
 }
