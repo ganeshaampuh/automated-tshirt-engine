@@ -3,11 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { waitUntil } from "@vercel/functions";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { strandedSets } from "@/db/claimSets";
+import { approvable } from "@/app/batch/[id]/galleryRules";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { deleteBlob, putBlob } from "@/lib/blob";
 import { rowsToInserts } from "@/lib/batchInserts";
 import { parseBatchRows, type ParsedRow, type RowError } from "@/lib/csv";
+import { initialStates } from "@/lib/memberState";
 import { tickOrigin } from "@/lib/tickOrigin";
 import { MAX_CSV_MESSAGE, MAX_UPLOAD_BYTES } from "@/lib/upload";
 
@@ -120,5 +124,167 @@ export async function createBatchFromCsvAction(form: FormData): Promise<ActionRe
     kickTick(await requestOrigin(), id);
     revalidatePath("/");
     return { id };
+  });
+}
+
+/** Recomputes a batch's roll-up from its sets, so the header figures match the cards after a verdict. */
+async function refreshCounts(batchId: string) {
+  const rows = await db
+    .select({ status: sets.status, n: sql<number>`count(*)::int` })
+    .from(sets)
+    .where(eq(sets.batchId, batchId))
+    .groupBy(sets.status);
+  const n = (status: string) => rows.find(r => r.status === status)?.n ?? 0;
+  await db
+    .update(batches)
+    .set({
+      readyCount: n("ready"),
+      approvedCount: n("approved"),
+      failedCount: n("failed"),
+      updatedAt: new Date(),
+    })
+    .where(eq(batches.id, batchId));
+}
+
+/** The batch a set belongs to, and its current status — what every verdict below has to read first. */
+async function loadSet(id: string) {
+  const row = await db.query.sets
+    .findFirst({ where: eq(sets.id, id), columns: { id: true, batchId: true, status: true, input: true } })
+    .catch(e => fail("Gagal membaca set ini.", e));
+  if (!row) fail("Set ini tidak ada.");
+  return row;
+}
+
+/**
+ * Approves the sets the shop ticked.
+ *
+ * `approvable` decides which ids actually move: only sets that are `ready` this moment. A checkbox
+ * can be stale — the set failed since the page loaded, another tab already approved it — and
+ * advancing one of those would either bless artwork that was never rendered or count an approval
+ * twice. Such ids are dropped silently and the answer says how many really moved.
+ */
+export async function approveSetsAction(ids: string[]): Promise<ActionResult<{ approved: number }>> {
+  return action(async () => {
+    const wanted = [...new Set(ids)];
+    if (wanted.length === 0) return { approved: 0 };
+    const rows = await db
+      .select({ id: sets.id, status: sets.status, batchId: sets.batchId })
+      .from(sets)
+      .where(inArray(sets.id, wanted))
+      .catch(e => fail("Gagal membaca set ini.", e));
+
+    const moving = approvable(wanted, rows);
+    if (moving.length === 0) return { approved: 0 };
+    // Guarded on `ready` in SQL too: between the read above and this write another tab may have
+    // moved the same set, and the database is the only place that can settle the race.
+    await db
+      .update(sets)
+      .set({ status: "approved", updatedAt: new Date() })
+      .where(and(inArray(sets.id, moving), eq(sets.status, "ready")))
+      .catch(e => fail("Gagal menyetujui set.", e));
+
+    const batchIds = [...new Set(rows.filter(r => moving.includes(r.id)).map(r => r.batchId))];
+    for (const batchId of batchIds) if (batchId) await refreshCounts(batchId);
+    for (const batchId of batchIds) if (batchId) revalidatePath(`/batch/${batchId}`);
+    return { approved: moving.length };
+  });
+}
+
+/**
+ * Rejects one set: the shop has looked at it and does not want it in the export.
+ *
+ * A set still queued or processing cannot be rejected — there is nothing to look at yet, and the
+ * tick that owns it would overwrite the verdict when it finishes.
+ */
+export async function rejectSetAction(id: string): Promise<ActionResult<null>> {
+  return action(async () => {
+    const row = await loadSet(id);
+    if (row.status === "queued" || row.status === "processing") fail("Set ini masih diproses.");
+    await db
+      .update(sets)
+      .set({ status: "rejected", updatedAt: new Date() })
+      .where(eq(sets.id, id))
+      .catch(e => fail("Gagal menolak set.", e));
+    if (row.batchId) {
+      await refreshCounts(row.batchId);
+      revalidatePath(`/batch/${row.batchId}`);
+    }
+    return null;
+  });
+}
+
+/**
+ * Sends one set back through the pipeline.
+ *
+ * The row goes back to `queued` with its error and member previews cleared, the batch is reopened
+ * to `processing` (a tick refuses to work on a batch that is already `ready`), and a fresh chain is
+ * kicked. The note the shop typed has no column of its own yet, so it is kept on `input.note`,
+ * where a later pass over the prompt can pick it up; nothing reads it today.
+ */
+export async function regenerateSetAction(id: string, note?: string): Promise<ActionResult<null>> {
+  return action(async () => {
+    const row = await loadSet(id);
+    const trimmed = note?.trim() ?? "";
+    const input = { ...row.input, ...(trimmed === "" ? {} : { note: trimmed }) };
+    await db
+      .update(sets)
+      .set({
+        status: "queued",
+        error: null,
+        memberStates: initialStates(row.input.members.map(m => m.id)),
+        input,
+        updatedAt: new Date(),
+      })
+      .where(eq(sets.id, id))
+      .catch(e => fail("Gagal menjadwalkan ulang set ini.", e));
+
+    if (row.batchId) {
+      await db.update(batches).set({ status: "processing", updatedAt: new Date() }).where(eq(batches.id, row.batchId));
+      await refreshCounts(row.batchId);
+      kickTick(await requestOrigin(), row.batchId);
+      revalidatePath(`/batch/${row.batchId}`);
+    }
+    return null;
+  });
+}
+
+/**
+ * A claim older than this belongs to a tick that died, and is offered again. Five minutes is well
+ * past the route's 60 s `maxDuration`, so no live tick can be robbed of a set it is still drawing.
+ */
+const STALE_CLAIM_MINUTES = 5;
+
+/**
+ * Restarts a chain that stopped — a tick that was cut off mid-flight, or a kick that never left.
+ *
+ * Stranded sets are rescued before anything else: rows a dead tick left in `processing` are put
+ * back to `queued`, because a fresh chain claims `queued` rows only and would step straight over
+ * them, leaving the batch wedged short of `ready` for good. The answer says both how many were
+ * rescued and how many are waiting in total, so the button can report what it actually did.
+ */
+export async function resumeBatchAction(id: string): Promise<ActionResult<{ remaining: number; requeued: number }>> {
+  return action(async () => {
+    const batch = await db.query.batches.findFirst({ where: eq(batches.id, id) }).catch(e => fail("Gagal membaca batch.", e));
+    if (!batch) fail("Batch ini tidak ada.");
+
+    const rescued = await db
+      .update(sets)
+      .set({ status: "queued", updatedAt: new Date() })
+      .where(strandedSets(id, STALE_CLAIM_MINUTES))
+      .returning({ id: sets.id })
+      .catch(e => fail("Gagal melanjutkan batch.", e));
+
+    const [waiting] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(sets)
+      .where(and(eq(sets.batchId, id), inArray(sets.status, ["queued", "processing"])));
+    const remaining = waiting?.n ?? 0;
+
+    if (remaining > 0 && batch.status !== "processing") {
+      await db.update(batches).set({ status: "processing", updatedAt: new Date() }).where(eq(batches.id, id));
+    }
+    if (remaining > 0) kickTick(await requestOrigin(), id);
+    revalidatePath(`/batch/${id}`);
+    return { remaining, requeued: rescued.length };
   });
 }

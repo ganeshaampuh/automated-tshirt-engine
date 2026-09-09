@@ -21,3 +21,20 @@ export function claimableSets(batchId: string, limit: number): SQL {
     for update skip locked
   )`;
 }
+
+/**
+ * The `where` of a resume's rescue: the sets of one batch that a dead tick left behind.
+ *
+ * A tick claims by moving rows to `processing`; if it then dies — a crash, a failed write, or
+ * `maxDuration` running out mid-set — those rows stay `processing` forever, because `claimableSets`
+ * only ever takes `queued` ones. The batch can then never reach `ready` and the gallery would poll
+ * a batch that has no live work. `resumeBatchAction` puts such rows back in the queue.
+ *
+ * The age cut is what keeps this safe: a legitimate tick has at most `maxDuration` (60 s) to live,
+ * so at five minutes there is no tick left that could still be working on the row. Anything younger
+ * is left alone rather than raced.
+ */
+export function strandedSets(batchId: string, staleMinutes: number): SQL {
+  return sql`${sets.batchId} = ${batchId} and ${sets.status} = 'processing'
+    and ${sets.updatedAt} < now() - make_interval(mins => ${staleMinutes})`;
+}
