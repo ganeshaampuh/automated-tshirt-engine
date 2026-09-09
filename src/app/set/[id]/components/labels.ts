@@ -8,14 +8,8 @@ export const SIZE_LABEL: Record<SizeClass, string> = {
 
 export const SIZE_CLASSES: SizeClass[] = ["adult", "kids-1-9", "kids-0-1"];
 
-export const SHIRT_COLORS: { hex: string; name: string }[] = [
-  { hex: "#ffffff", name: "Putih" },
-  { hex: "#1a1a1a", name: "Hitam" },
-  { hex: "#1f2a44", name: "Navy" },
-  { hex: "#c62828", name: "Merah" },
-  { hex: "#f5a3c7", name: "Pink" },
-  { hex: "#f6dd57", name: "Kuning" },
-];
+/** Moved to `@/lib/shirtColors` so library code can read it; re-exported here for the editor. */
+export { SHIRT_COLORS } from "@/lib/shirtColors";
 
 /** Quick-add rows: the family a birthday set almost always needs. */
 export const QUICK_MEMBERS: { label: string; sizeClass: SizeClass }[] = [
