@@ -134,12 +134,18 @@ export async function createBatchFromCsvAction(form: FormData): Promise<ActionRe
 }
 
 /**
- * Recomputes a batch's roll-up from its sets, so the header figures match the cards after a verdict.
+ * Recomputes a batch's roll-up from its sets, so the home page's figures match the cards after a
+ * verdict, and closes a batch that has nothing left to do.
  *
- * It also closes a batch that has nothing left to do. A tick that died between its per-set writes
- * and its own roll-up leaves the batch at `processing` with no set queued or processing, which no
- * later tick can ever resolve — every path through this function heals that. The `processing` guard
- * keeps it from touching a batch that has moved on to exporting.
+ * Two statements on purpose. The counts must be written whatever state the batch is in — the home
+ * page reads them long after a batch has closed, and a verdict recorded then still has to show up.
+ * Only the `ready` transition is conditional, because a batch that has moved on to `exporting` or
+ * `exported` must not be dragged back. Guarding the single UPDATE on `processing` instead froze the
+ * counts at the moment the batch first closed.
+ *
+ * The closing itself heals a tick that died between its per-set writes and its own roll-up, which
+ * leaves the batch at `processing` with no set queued or processing and no later tick able to
+ * resolve it.
  */
 async function refreshCounts(batchId: string) {
   const rows = await db
@@ -148,7 +154,7 @@ async function refreshCounts(batchId: string) {
     .where(eq(sets.batchId, batchId))
     .groupBy(sets.status);
   const n = (status: string) => rows.find(r => r.status === status)?.n ?? 0;
-  const done = n("queued") + n("processing") === 0;
+
   await db
     .update(batches)
     .set({
@@ -156,9 +162,15 @@ async function refreshCounts(batchId: string) {
       approvedCount: n("approved"),
       failedCount: n("failed"),
       updatedAt: new Date(),
-      ...(done ? { status: "ready" as const } : {}),
     })
-    .where(done ? and(eq(batches.id, batchId), eq(batches.status, "processing")) : eq(batches.id, batchId));
+    .where(eq(batches.id, batchId));
+
+  if (n("queued") + n("processing") === 0) {
+    await db
+      .update(batches)
+      .set({ status: "ready", updatedAt: new Date() })
+      .where(and(eq(batches.id, batchId), eq(batches.status, "processing")));
+  }
 }
 
 /** The batch a set belongs to, and its current status — what every verdict below has to read first. */
