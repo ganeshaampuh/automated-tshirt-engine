@@ -4,6 +4,7 @@ import sharp from "sharp";
 import type { AIProvider } from "@/ai";
 import { createNodeMeasurer, loadImageFromFile } from "@/engine/server";
 import type { ProcessDeps } from "@/lib/processSet";
+import { liveDb } from "./live";
 
 /**
  * The whole chain against a real database: a batch of four sets — one more than a tick's `TICK_BATCH`
@@ -59,7 +60,7 @@ function stubDeps(): ProcessDeps {
   };
 }
 
-describe.skipIf(!process.env.DATABASE_URL)("POST /api/batch/[id]/tick", () => {
+describe.skipIf(!liveDb)("POST /api/batch/[id]/tick", () => {
   it("processes every set of a batch across ticks and leaves none processing", async () => {
     const { eq } = await import("drizzle-orm");
     const { db, schema } = await import("@/db");

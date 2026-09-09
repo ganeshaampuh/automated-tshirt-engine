@@ -88,21 +88,30 @@ Model ids and the base URL live only in `src/ai/config.ts`. Never log any of the
 | `pnpm build` / `pnpm start` | Production build and server. |
 | `pnpm lint` | ESLint (flat config, `eslint-config-next`). |
 | `pnpm test` | Vitest, the whole unit/integration suite. |
-| `pnpm test:e2e` | Playwright (`e2e/`): the browser↔server render parity test, the editor smoke test, and the batch road (`batch.spec.ts`). The last two need `DATABASE_URL` and skip without it. |
+| `pnpm test:e2e` | Playwright (`e2e/`): the browser↔server render parity test, the editor smoke test, and the batch road (`batch.spec.ts`). The editor spec needs `DATABASE_URL`; the batch road needs `DATABASE_URL` **and** `ALLOW_DB_TESTS=1`. Both skip without them. |
 | `pnpm db:generate` | Drizzle Kit: generate a migration from `src/db/schema.ts` into `drizzle/`. |
 | `pnpm db:migrate` | Apply pending migrations to `DATABASE_URL`. |
 | `pnpm db:studio` | Drizzle Studio against `DATABASE_URL`. |
 | `pnpm gen:fonts` | Regenerate `src/app/fonts.css` from the font registry in `src/engine/fonts.ts`. Run it after adding a font file. |
 
 CI (`.github/workflows/ci.yml`) runs `tsc --noEmit`, `pnpm lint` and `pnpm test` with `CI=true` on
-every push to `main` and every pull request; no `DATABASE_URL` is configured there, so the database
-specs skip and a missing golden hard-fails instead of being written.
+every push to `main` and every pull request; no `DATABASE_URL` or `ALLOW_DB_TESTS` is configured
+there, so the database specs skip and a missing golden hard-fails instead of being written.
 
-Database tests (`tests/db/**`) are skipped unless `DATABASE_URL` is set. Run them with your local
-env loaded:
+Database tests (`tests/db/**`) and the batch end-to-end spec (`e2e/batch.spec.ts`) write real rows,
+previews and ZIPs, so they need two things: a `DATABASE_URL`, and `ALLOW_DB_TESTS=1` on top of it.
+Without the opt-in they are reported as skipped, never silently dropped. The second condition exists
+because all three environments still share one database (see [Known
+limitations](#known-limitations)), so the `DATABASE_URL` in a developer's `.env.local` is the shop's
+own — having the env loaded must not be enough to write into it.
 
 ```bash
-pnpm dlx dotenv-cli -e .env.local -- pnpm test tests/db
+# unit + database tests
+ALLOW_DB_TESTS=1 pnpm dlx dotenv-cli -e .env.local -- pnpm test
+# just the database ones
+ALLOW_DB_TESTS=1 pnpm dlx dotenv-cli -e .env.local -- pnpm test tests/db
+# the batch road in a browser
+ALLOW_DB_TESTS=1 pnpm dlx dotenv-cli -e .env.local -- pnpm test:e2e e2e/batch.spec.ts
 ```
 
 ## Batch

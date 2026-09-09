@@ -29,10 +29,15 @@ config({ path: ".env.local", quiet: true });
  *
  * It does write for real: one batch, three sets, ten previews and a ZIP, into whatever
  * `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` point at. Until the environments are split that is the
- * shop's own database — see "Known limitations" in the README.
+ * shop's own database — see "Known limitations" in the README. That is why a reachable database is
+ * not on its own enough to run this: `ALLOW_DB_TESTS=1` has to be set too, so writing into the live
+ * shop is always something a human asked for rather than a side effect of having `.env.local`.
  */
+const allowed = ["1", "true"].includes((process.env.ALLOW_DB_TESTS ?? "").toLowerCase());
+
 test.describe(() => {
   test.skip(!process.env.DATABASE_URL, "DATABASE_URL is not set");
+  test.skip(!allowed, "ALLOW_DB_TESTS is not set; this spec writes real batches, previews and ZIPs");
 
   test("uploads a csv, draws every set, approves one and exports a zip", async ({ page }) => {
     // Three sets of ten shirts, each one a 600 px mockup per member, then an export that renders
