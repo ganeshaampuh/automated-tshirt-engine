@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { z } from "zod";
 import type { AIProvider } from "./provider";
+import { fetchBytes } from "@/lib/sets";
 import { clipartPrompt, describeSystem } from "./prompts";
 
 export type ClipartMeta = { width: number; height: number; dominantColors: string[]; caption: string; kind: "photo" | "illustration" | "logo" | "pattern" };
@@ -41,7 +42,9 @@ export async function generateClipart(theme: string, deps: { provider: AIProvide
 }
 
 export async function describeClipart(src: string | Buffer, deps: { provider: AIProvider }): Promise<ClipartMeta> {
-  const buf = Buffer.isBuffer(src) ? src : Buffer.from(await (await fetch(src)).arrayBuffer());
+  // A string src is a `clipartSrc`, which the shop (and, in batch mode, a spreadsheet) supplies:
+  // read it through the same guarded door the exporter uses, never with a bare `fetch`.
+  const buf = Buffer.isBuffer(src) ? src : await fetchBytes(src);
   const { width = 0, height = 0 } = await sharp(buf).metadata();
   const [colors, small] = await Promise.all([dominantColors(buf), sharp(buf).resize(512, 512, { fit: "inside" }).png().toBuffer()]);
   let caption = "", kind: ClipartMeta["kind"] = "illustration";

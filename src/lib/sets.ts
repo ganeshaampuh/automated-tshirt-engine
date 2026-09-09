@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { expand, type Set, type TextMeasurer } from "@/engine";
 import { exportPrintPng, renderMockup, loadShirtAsset, defaultShirtFor, type RenderOpts } from "@/engine/server";
 import { zipFiles } from "./zip";
+import { fetchRemoteImage } from "./remoteImage";
 
 export type ClipartSize = { w: number; h: number };
 export type ExportDeps = { measure: TextMeasurer; clipartSize: ClipartSize; loadImage: RenderOpts["loadImage"] };
@@ -14,15 +15,30 @@ export function buildDesigns(set: Set, measure: TextMeasurer, clipartSize: Clipa
   return expand(set, { measure, clipart: clipartSize });
 }
 
-/** Reads bytes for a local path, a `data:` URL or an http(s) URL. */
+/**
+ * Reads bytes for a `data:` URL, a remote URL or a local path.
+ *
+ * The local-path branch is only ever handed paths this app itself produced — the shirt and mockup
+ * assets it ships and the test fixtures. Anything a customer can influence arrives as `https:` and
+ * goes through `fetchRemoteImage`, which is the only place this app fetches a URL it did not
+ * construct (`SetStyleSchema.clipartSrc` enforces that shape at the edge).
+ */
 export async function fetchBytes(src: string): Promise<Buffer> {
   if (src.startsWith("data:")) return Buffer.from(src.slice(src.indexOf(",") + 1), "base64");
-  if (/^https?:/.test(src)) {
-    const res = await fetch(src);
-    if (!res.ok) throw new Error(`Failed to fetch ${src}: ${res.status}`);
-    return Buffer.from(await res.arrayBuffer());
-  }
+  if (/^https?:/i.test(src)) return fetchRemoteImage(src);
   return readFile(src);
+}
+
+/**
+ * Wraps a `loadImage` so a remote layer src is fetched through the guard instead of by the image
+ * decoder, which would happily follow any URL — the renderer is a second door to the same hole.
+ */
+export function guardRemoteImages(loadImage: RenderOpts["loadImage"]): RenderOpts["loadImage"] {
+  return async src => {
+    if (!/^https?:/i.test(src)) return loadImage(src);
+    const bytes = await fetchRemoteImage(src);
+    return loadImage(`data:application/octet-stream;base64,${bytes.toString("base64")}`);
+  };
 }
 
 /** Intrinsic pixel size of the clipart, which `expand` needs to keep its aspect ratio. */
@@ -39,15 +55,16 @@ export async function clipartSize(src: string): Promise<ClipartSize> {
 export async function exportSetZip(set: Set, deps: ExportDeps) {
   const files: { name: string; data: Buffer }[] = [];
   const sizes: Record<string, { widthCm: number; heightCm: number }> = {};
+  const loadImage = guardRemoteImages(deps.loadImage);
   for (const { memberId, design } of buildDesigns(set, deps.measure, deps.clipartSize)) {
     const member = set.input.members.find(m => m.id === memberId);
     if (!member) throw new Error(`Unknown member ${memberId}`);
     const base = `${slug(set.input.kidName)}-${slug(member.label)}`;
-    const print = await exportPrintPng(design, deps.loadImage);
+    const print = await exportPrintPng(design, loadImage);
     files.push({ name: `${base}.png`, data: print.png });
     sizes[memberId] = { widthCm: print.widthCm, heightCm: print.heightCm };
     const shirt = await loadShirtAsset(defaultShirtFor(design.sizeClass));
-    files.push({ name: `${base}.mockup.jpg`, data: await renderMockup(design, shirt, { loadImage: deps.loadImage, width: 2000 }) });
+    files.push({ name: `${base}.mockup.jpg`, data: await renderMockup(design, shirt, { loadImage, width: 2000 }) });
   }
   return { zip: zipFiles(files), sizes };
 }

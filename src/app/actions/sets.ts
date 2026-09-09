@@ -11,6 +11,7 @@ import { clipartPatch } from "@/db/clipart";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { putBlob } from "@/lib/blob";
 import { clipartSize, exportSetZip } from "@/lib/sets";
+import { RemoteImageError } from "@/lib/remoteImage";
 import { processClipartUpload } from "@/lib/clipartUpload";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE } from "@/lib/upload";
 
@@ -23,6 +24,9 @@ const { sets } = schema;
  */
 function fail(context: string, cause?: unknown): never {
   if (cause !== undefined) console.error(`[sets] ${context}:`, cause instanceof Error ? cause.message : cause);
+  // A refused image URL is the shop's own mistake to fix, so its (already Indonesian, already
+  // address-free) message is shown instead of the generic one.
+  if (cause instanceof RemoteImageError) throw new ActionError(cause.message);
   throw new ActionError(context);
 }
 

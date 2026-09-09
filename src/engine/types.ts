@@ -51,9 +51,26 @@ export const MemberSchema = z.object({
 });
 export type Member = z.infer<typeof MemberSchema>;
 
+/**
+ * A clipart source this app is willing to read. Either an `https:` URL (which `fetchRemoteImage`
+ * then vets before a byte is fetched), an inline `data:` image, or one of the asset paths this app
+ * ships — the test fixtures, `public/`, and the public routes the browser and the dev parity page
+ * use. Anything else — `http:`, `file:`, `../..`, a bare path — is refused here rather than being
+ * handed to `readFile` or `fetch` later.
+ */
+const ASSET_PREFIXES = ["tests/fixtures/", "public/", "/samples/", "/mockups/", "/fonts/"];
+const ClipartSrc = z.string().refine(
+  s =>
+    /^https:\/\//.test(s) ||
+    s.startsWith("data:image/") ||
+    // `..` is refused outright: an allowed prefix must not become a ladder out of the repo.
+    (!s.includes("..") && ASSET_PREFIXES.some(p => s.startsWith(p))),
+  { message: "clipartSrc must be an https URL, a data: image, or a bundled asset path" },
+);
+
 export const SetInputSchema = z.object({
   kidName: z.string().min(1), age: z.number().int().min(0).max(120), theme: z.string().min(1),
-  clipartSrc: z.string().optional(), shirtColor: Hex, language: LanguageSchema,
+  clipartSrc: ClipartSrc.optional(), shirtColor: Hex, language: LanguageSchema,
   members: z.array(MemberSchema).min(1),
 }).refine(s => s.members.filter(m => m.kind === "birthday-kid").length === 1, { message: "exactly one birthday-kid member" });
 export type SetInput = z.infer<typeof SetInputSchema>;
@@ -66,7 +83,7 @@ export type Wording = z.infer<typeof WordingSchema>;
 export const SetStyleSchema = z.object({
   template: z.literal("collage"), font: z.string(),
   palette: z.object({ primary: Hex, secondary: Hex, outline: Hex }),
-  clipartSrc: z.string(), wording: WordingSchema,
+  clipartSrc: ClipartSrc, wording: WordingSchema,
 });
 export type SetStyle = z.infer<typeof SetStyleSchema>;
 
