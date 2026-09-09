@@ -10,9 +10,11 @@ import { db, schema } from "@/db";
 import { clipartPatch } from "@/db/clipart";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { putBlob } from "@/lib/blob";
-import { clipartSize, exportSetZip } from "@/lib/sets";
+import { clipartSize, exportSetZip, newByteCache } from "@/lib/sets";
+import { RemoteImageError } from "@/lib/remoteImage";
 import { processClipartUpload } from "@/lib/clipartUpload";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE } from "@/lib/upload";
+import { initialStates, setMemberState, type MemberStates } from "@/lib/memberState";
 
 const { sets } = schema;
 
@@ -23,6 +25,9 @@ const { sets } = schema;
  */
 function fail(context: string, cause?: unknown): never {
   if (cause !== undefined) console.error(`[sets] ${context}:`, cause instanceof Error ? cause.message : cause);
+  // A refused image URL is the shop's own mistake to fix, so its (already Indonesian, already
+  // address-free) message is shown instead of the generic one.
+  if (cause instanceof RemoteImageError) throw new ActionError(cause.message);
   throw new ActionError(context);
 }
 
@@ -158,6 +163,15 @@ export async function generateStyleAction(
   });
 }
 
+/** Builds `memberStates` for a freshly exported set: every member is `ready` with its cm figures. */
+function readyMemberStates(memberIds: string[], sizes: Record<string, { widthCm: number; heightCm: number }>): MemberStates {
+  let states = initialStates(memberIds);
+  for (const [memberId, size] of Object.entries(sizes)) {
+    states = setMemberState(states, memberId, { status: "ready", widthCm: size.widthCm, heightCm: size.heightCm });
+  }
+  return states;
+}
+
 export async function exportSetAction(
   id: string,
 ): Promise<ActionResult<{ zipUrl: string; sizes: Record<string, { widthCm: number; heightCm: number }> }>> {
@@ -166,8 +180,11 @@ export async function exportSetAction(
     if (!style) fail("Buat gayanya dulu sebelum export.");
     let zipUrl: string, sizes: Record<string, { widthCm: number; heightCm: number }>;
     try {
-      const size = await clipartSize(style.clipartSrc);
-      const out = await exportSetZip({ input, style }, { measure: createNodeMeasurer(), clipartSize: size, loadImage: loadImageFromFile });
+      // One cache for the whole export: the clipart is wanted once for its size and then twice per
+      // member, and a remote src must not be fetched nine times.
+      const cache = newByteCache();
+      const size = await clipartSize(style.clipartSrc, cache);
+      const out = await exportSetZip({ input, style }, { measure: createNodeMeasurer(), clipartSize: size, loadImage: loadImageFromFile, cache });
       sizes = out.sizes;
       zipUrl = await putBlob(`exports/${id}-${Date.now()}.zip`, out.zip, "application/zip");
     } catch (e) {
@@ -176,7 +193,7 @@ export async function exportSetAction(
     // `status` is deliberately untouched: `exportUrl` is the record that an export happened, and a
     // re-export must not demote a set someone has already approved.
     try {
-      await write(id, { exportUrl: zipUrl });
+      await write(id, { exportUrl: zipUrl, memberStates: readyMemberStates(input.members.map(m => m.id), sizes) });
     } catch (e) {
       fail("Gagal menyimpan hasil export.", e);
     }

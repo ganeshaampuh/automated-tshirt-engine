@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { eq } from "drizzle-orm";
 import { unicornSet } from "../fixtures/set-unicorn";
+import { liveDb } from "./live";
 
-describe.skipIf(!process.env.DATABASE_URL)("db: sets table", () => {
+describe.skipIf(!liveDb)("db: sets table", () => {
   it("inserts, reads back, and deletes a set row", async () => {
     const { db, schema } = await import("@/db");
     const fixture = unicornSet();

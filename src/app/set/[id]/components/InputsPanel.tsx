@@ -7,7 +7,7 @@ import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE } from "@/lib/upload";
 import type { Action } from "../useSetEditor";
 import { SHIRT_COLORS } from "./labels";
 import { MembersList } from "./MembersList";
-import { Button, Field, Section, useAction, useToast } from "./ui";
+import { Button, Field, Section, useAction, useToast } from "@/app/components/ui";
 
 /** Each resolves to a failed `ActionResult` the caller should toast, or to nothing on success. */
 type Ran = Promise<ActionResult<unknown> | void>;

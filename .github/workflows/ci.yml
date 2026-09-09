@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with: { version: 11 }
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm lint
+      # No DATABASE_URL is provided in CI, so the two specs that need it
+      # skip by design. CI=true also makes tests/engine/golden.ts hard-fail
+      # on a missing golden image instead of writing one.
+      - run: pnpm test
+        env: { CI: "true" }

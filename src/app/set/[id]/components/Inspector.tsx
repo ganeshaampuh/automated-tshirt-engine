@@ -3,7 +3,7 @@
 import { CURATED_FONTS, fontWeights, nearestWeight, type Design, type Layer, type Member } from "@/engine";
 import type { LayerPatch } from "../useSetEditor";
 import { LAYER_LABEL, WEIGHT_LABEL } from "./labels";
-import { Button, Field, Section } from "./ui";
+import { Button, Field, Section } from "@/app/components/ui";
 
 function Num({ label, value, step = 1, onChange }: { label: string; value: number; step?: number; onChange: (n: number) => void }) {
   return (

@@ -57,7 +57,12 @@ describe("exportSetAction", () => {
 describe("home page status map", () => {
   const page = readFileSync(path.join(__dirname, "..", "..", "src", "app", "page.tsx"), "utf8");
 
-  it("lists no status the app never writes", () => {
-    expect(page).not.toContain("exported:");
+  // Scoped to the *set* map: a batch has its own vocabulary next to it, and "exported" is a real
+  // batch status. A set never reaches it, so the set map must still not offer it.
+  const setMap = page.slice(page.indexOf("const STATUS"), page.indexOf("const BATCH_STATUS"));
+
+  it("lists no set status the app never writes", () => {
+    expect(setMap).toContain("draft:");
+    expect(setMap).not.toContain("exported:");
   });
 });

@@ -8,8 +8,28 @@ export type Language = z.infer<typeof LanguageSchema>;
 
 const Hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
+/**
+ * Every image source this app is willing to read, whether it arrived as a `clipartSrc` or inside a
+ * member override: an `https:` URL (which `fetchRemoteImage` then vets before a byte is fetched), an
+ * inline `data:` image, or one of the asset paths this app ships — the test fixtures, `public/`, and
+ * the public routes the browser and the dev parity page use. Anything else — `http:`, `file:`, an
+ * absolute path, anything with `..` in it — is refused here rather than being handed to `readFile`
+ * or `fetch` later. A member override can set a layer's `src`, so this must guard `ImageLayer` too,
+ * not only the clipart field.
+ */
+const ASSET_PREFIXES = ["tests/fixtures/", "public/", "/samples/", "/mockups/", "/fonts/"];
+export const isAllowedImageSrc = (s: string): boolean =>
+  /^https:\/\//.test(s) ||
+  s.startsWith("data:image/") ||
+  // `..` is refused outright: an allowed prefix must not become a ladder out of the repo.
+  (!s.includes("..") && ASSET_PREFIXES.some(p => s.startsWith(p)));
+
+const ClipartSrc = z.string().refine(isAllowedImageSrc, {
+  message: "image src must be an https URL, a data: image, or a bundled asset path",
+});
+
 export const ImageLayerSchema = z.object({
-  id: z.string(), type: z.literal("image"), src: z.string(),
+  id: z.string(), type: z.literal("image"), src: ClipartSrc,
   x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive(),
   rotation: z.number().optional(),
 });
@@ -53,7 +73,10 @@ export type Member = z.infer<typeof MemberSchema>;
 
 export const SetInputSchema = z.object({
   kidName: z.string().min(1), age: z.number().int().min(0).max(120), theme: z.string().min(1),
-  clipartSrc: z.string().optional(), shirtColor: Hex, language: LanguageSchema,
+  clipartSrc: ClipartSrc.optional(), shirtColor: Hex, language: LanguageSchema,
+  // The shop's own order code for this set. It names the set's folder in the batch export (spec
+  // §8.2), so it is capped short enough to stay a sane directory name.
+  skuPrefix: z.string().min(1).max(40).optional(),
   members: z.array(MemberSchema).min(1),
 }).refine(s => s.members.filter(m => m.kind === "birthday-kid").length === 1, { message: "exactly one birthday-kid member" });
 export type SetInput = z.infer<typeof SetInputSchema>;
@@ -66,7 +89,7 @@ export type Wording = z.infer<typeof WordingSchema>;
 export const SetStyleSchema = z.object({
   template: z.literal("collage"), font: z.string(),
   palette: z.object({ primary: Hex, secondary: Hex, outline: Hex }),
-  clipartSrc: z.string(), wording: WordingSchema,
+  clipartSrc: ClipartSrc, wording: WordingSchema,
 });
 export type SetStyle = z.infer<typeof SetStyleSchema>;
 

@@ -9,6 +9,9 @@ export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 export const MAX_UPLOAD_MESSAGE = "Ukuran gambar maksimal 8 MB. Kecilkan dulu, ya.";
 
+/** The same ceiling worded for a batch CSV, which is a spreadsheet and not a picture. */
+export const MAX_CSV_MESSAGE = "Ukuran file CSV maksimal 8 MB.";
+
 /**
  * Decode guard against a decompression bomb: 100 MP is well past any phone camera (a 50 MP photo
  * is 8160x6120) while refusing an image that would need gigabytes of raw pixels.

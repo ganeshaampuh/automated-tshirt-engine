@@ -1,6 +1,8 @@
 import sharp from "sharp";
 import { z } from "zod";
 import type { AIProvider } from "./provider";
+import { fetchBytes, type ByteCache } from "@/lib/sets";
+import { MAX_INPUT_PIXELS } from "@/lib/upload";
 import { clipartPrompt, describeSystem } from "./prompts";
 
 export type ClipartMeta = { width: number; height: number; dominantColors: string[]; caption: string; kind: "photo" | "illustration" | "logo" | "pattern" };
@@ -20,7 +22,7 @@ export async function removeWhiteBackground(png: Buffer): Promise<Buffer> {
 }
 
 export async function dominantColors(png: Buffer, n = 5): Promise<string[]> {
-  const { data } = await sharp(png).ensureAlpha().resize(64, 64, { fit: "inside" }).raw().toBuffer({ resolveWithObject: true });
+  const { data } = await sharp(png, { limitInputPixels: MAX_INPUT_PIXELS }).ensureAlpha().resize(64, 64, { fit: "inside" }).raw().toBuffer({ resolveWithObject: true });
   const counts = new Map<string, number>();
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] < 128) continue;
@@ -40,10 +42,24 @@ export async function generateClipart(theme: string, deps: { provider: AIProvide
   return { url, width, height };
 }
 
-export async function describeClipart(src: string | Buffer, deps: { provider: AIProvider }): Promise<ClipartMeta> {
-  const buf = Buffer.isBuffer(src) ? src : Buffer.from(await (await fetch(src)).arrayBuffer());
-  const { width = 0, height = 0 } = await sharp(buf).metadata();
-  const [colors, small] = await Promise.all([dominantColors(buf), sharp(buf).resize(512, 512, { fit: "inside" }).png().toBuffer()]);
+export async function describeClipart(
+  src: string | Buffer,
+  // `cache` is the caller's per-set `ByteCache`. Without it this is a second fetch of the very src
+  // `clipartSize` is about to read — two outbound requests per set, four hundred for a batch of two
+  // hundred, at whatever host the spreadsheet named. `src/lib/sets.ts` states the invariant: one
+  // fetch per src per export.
+  deps: { provider: AIProvider; cache?: ByteCache },
+): Promise<ClipartMeta> {
+  // A string src is a `clipartSrc`, which the shop (and, in batch mode, a spreadsheet) supplies:
+  // read it through the same guarded door the exporter uses, never with a bare `fetch`.
+  const buf = Buffer.isBuffer(src) ? src : await fetchBytes(src, deps.cache);
+  // Every decode of these bytes carries the upload pixel ceiling: `src` is attacker-chosen in batch
+  // mode, and 16 MB of PNG can still unpack into gigabytes of raw pixels.
+  const { width = 0, height = 0 } = await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+  const [colors, small] = await Promise.all([
+    dominantColors(buf),
+    sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).resize(512, 512, { fit: "inside" }).png().toBuffer(),
+  ]);
   let caption = "", kind: ClipartMeta["kind"] = "illustration";
   try {
     const r = await deps.provider.chatJSON({ system: describeSystem, user: "Describe this image.", images: [`data:image/png;base64,${small.toString("base64")}`], schema: DescribeSchema });

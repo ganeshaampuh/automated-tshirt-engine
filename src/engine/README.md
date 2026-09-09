@@ -40,6 +40,12 @@ graph and fails if anything node-only creeps back in.
 `defaultShirtFor`, `ShirtAssetSchema`, `fontFilePath`, `registerFonts`. Import it
 only from server code (route handlers, scripts, tests).
 
+`loadImageFromFile` is deliberately unguarded: it loads whatever src it is handed. App code must
+never pass it to a renderer directly — wrap it in `guardRemoteImages()` (`src/lib/sets.ts`), which
+routes an `https:` src through `fetchRemoteImage` and refuses any other src that is not a
+`data:image/` URI or a path this app ships. A member override can put an arbitrary string in a
+layer's `src`, and in batch mode the clipart address comes out of a spreadsheet.
+
 Browser rule: never touch font *files* or the filesystem from the browser — load
 fonts by URL with `fontUrl(family, weight)` and measure text with the browser measurer,
 which implements the same `TextMeasurer` interface (`textFit.ts`) that

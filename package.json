@@ -19,6 +19,7 @@
     "@napi-rs/canvas": "1.0.8",
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/blob": "^2.8.0",
+    "@vercel/functions": "^3.9.5",
     "drizzle-orm": "^0.45.2",
     "fflate": "^0.8.3",
     "konva": "^10.3.3",

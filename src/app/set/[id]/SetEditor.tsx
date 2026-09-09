@@ -8,7 +8,7 @@ import { InputsPanel } from "./components/InputsPanel";
 import { Inspector } from "./components/Inspector";
 import { MemberTabs } from "./components/MemberTabs";
 import { SizeReadout } from "./components/SizeReadout";
-import { Button, ToastHost, useAction, useToast } from "./components/ui";
+import { Button, ToastHost, useAction, useToast } from "@/app/components/ui";
 import { useSetEditor, type Initial, type LayerPatch, type Scope } from "./useSetEditor";
 
 export default function SetEditor({ initial }: { initial: Initial }) {
