@@ -5,15 +5,13 @@ import { headers } from "next/headers";
 import { waitUntil } from "@vercel/functions";
 import { db, schema } from "@/db";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
-import { putBlob } from "@/lib/blob";
+import { deleteBlob, putBlob } from "@/lib/blob";
 import { rowsToInserts } from "@/lib/batchInserts";
 import { parseBatchRows, type ParsedRow, type RowError } from "@/lib/csv";
-import { MAX_UPLOAD_BYTES } from "@/lib/upload";
+import { tickOrigin } from "@/lib/tickOrigin";
+import { MAX_CSV_MESSAGE, MAX_UPLOAD_BYTES } from "@/lib/upload";
 
 const { batches, sets } = schema;
-
-/** Same ceiling as a clipart upload, worded for a spreadsheet: 8 MiB is far above any 200-row CSV. */
-const MAX_CSV_MESSAGE = "Ukuran file CSV maksimal 8 MB.";
 
 function fail(context: string, cause?: unknown): never {
   if (cause !== undefined) console.error(`[batches] ${context}:`, cause instanceof Error ? cause.message : cause);
@@ -47,17 +45,13 @@ export async function validateCsvAction(
 }
 
 /**
- * The origin this request arrived on, so the tick route can be called by absolute URL.
- *
- * `x-forwarded-*` is what Vercel's proxy sets; `host` covers `next dev`. `VERCEL_URL` is the last
- * resort for a server-side call made without request headers.
+ * The origin the tick is called on. `tickOrigin` prefers what Vercel set and reads the request's
+ * headers only under `next dev`; see there for why the obvious precedence is the wrong one.
  */
 async function requestOrigin(): Promise<string> {
+  if (process.env.NODE_ENV !== "development") return tickOrigin(process.env);
   const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? process.env.VERCEL_URL;
-  if (!host) return "";
-  const proto = h.get("x-forwarded-proto") ?? (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host) ? "http" : "https");
-  return `${proto}://${host}`;
+  return tickOrigin(process.env, { host: h.get("host"), proto: h.get("x-forwarded-proto") });
 }
 
 /**
@@ -118,6 +112,8 @@ export async function createBatchFromCsvAction(form: FormData): Promise<ActionRe
         db.insert(sets).values(rowsToInserts(id, rows)),
       ]);
     } catch (e) {
+      // The CSV is already in Blob storage and now belongs to no batch, so take it back out.
+      await deleteBlob(csvUrl);
       fail("Gagal membuat batch.", e);
     }
 

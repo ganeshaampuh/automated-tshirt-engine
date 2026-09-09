@@ -5,9 +5,7 @@ import { useRef, useState } from "react";
 import { createBatchFromCsvAction, validateCsvAction } from "@/app/actions/batches";
 import { Button, ToastHost, useAction, useToast } from "@/app/components/ui";
 import type { RowError } from "@/lib/csv";
-import { MAX_UPLOAD_BYTES } from "@/lib/upload";
-
-const MAX_CSV_MESSAGE = "Ukuran file CSV maksimal 8 MB.";
+import { MAX_CSV_MESSAGE, MAX_UPLOAD_BYTES } from "@/lib/upload";
 
 type Report = { rows: number; members: number; errors: RowError[] };
 
