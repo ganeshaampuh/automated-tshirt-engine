@@ -28,6 +28,12 @@ test.describe(() => {
 
     await page.getByTestId("kid-name").fill("Keisya");
 
+    // One history for the whole editor: the shortcuts work with the caret still in a text field.
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect(page.getByTestId("kid-name")).toHaveValue("Anak");
+    await page.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(page.getByTestId("kid-name")).toHaveValue("Keisya");
+
     await page.getByTestId("clipart-upload").setInputFiles("public/samples/unicorn.png");
     await expect(page.getByTestId("canvas").locator("canvas")).toBeVisible({ timeout: 60_000 });
 

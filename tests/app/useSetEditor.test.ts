@@ -82,6 +82,49 @@ describe("useSetEditor reducer", () => {
     expect(member(next, "kid").overrides).toBeUndefined();
   });
 
+  it("moves a layer one step forward, and to the front, for the whole set", () => {
+    const ids = ["numeral", "clipart", "top", "ordinal", "occasion", "bottom"];
+    const forward = run(initial(), { type: "reorderLayer", memberId: "kid", layerId: "numeral", move: "forward", ids, scope: "set" });
+    for (const m of forward.input.members) {
+      expect(m.order).toEqual(["clipart", "numeral", "top", "ordinal", "occasion", "bottom"]);
+    }
+
+    const front = run(initial(), { type: "reorderLayer", memberId: "kid", layerId: "numeral", move: "front", ids, scope: "set" });
+    expect(front.input.members[0].order).toEqual(["clipart", "top", "ordinal", "occasion", "bottom", "numeral"]);
+  });
+
+  it("moves a layer backward, and to the back, on that member alone", () => {
+    const ids = ["numeral", "clipart", "top", "ordinal", "occasion", "bottom"];
+    const backward = run(initial(), { type: "reorderLayer", memberId: "kid", layerId: "bottom", move: "backward", ids, scope: "member" });
+    expect(member(backward, "kid").order).toEqual(["numeral", "clipart", "top", "ordinal", "bottom", "occasion"]);
+    expect(member(backward, "ayah").order).toBeUndefined();
+
+    const back = run(initial(), { type: "reorderLayer", memberId: "kid", layerId: "bottom", move: "back", ids, scope: "member" });
+    expect(member(back, "kid").order).toEqual(["bottom", "numeral", "clipart", "top", "ordinal", "occasion"]);
+  });
+
+  it("reorders from the member's own stack once it has one", () => {
+    const ids = ["numeral", "clipart", "top", "ordinal", "occasion", "bottom"];
+    const next = run(
+      initial(),
+      { type: "reorderLayer", memberId: "kid", layerId: "numeral", move: "front", ids, scope: "member" },
+      // The canvas now reports the reordered stack, and a second move works from that.
+      { type: "reorderLayer", memberId: "kid", layerId: "numeral", move: "backward", ids: ["clipart", "top", "ordinal", "occasion", "bottom", "numeral"], scope: "member" },
+    );
+    expect(member(next, "kid").order).toEqual(["clipart", "top", "ordinal", "occasion", "numeral", "bottom"]);
+  });
+
+  it("leaves the state untouched when a layer is already at the end it is moving towards", () => {
+    const ids = ["numeral", "clipart", "top", "ordinal", "occasion", "bottom"];
+    const base = initial();
+    for (const move of ["back", "backward"] as const) {
+      expect(run(base, { type: "reorderLayer", memberId: "kid", layerId: "numeral", move, ids, scope: "set" })).toBe(base);
+    }
+    for (const move of ["front", "forward"] as const) {
+      expect(run(base, { type: "reorderLayer", memberId: "kid", layerId: "bottom", move, ids, scope: "set" })).toBe(base);
+    }
+  });
+
   it("refuses to remove the birthday kid but removes family members", () => {
     const kept = run(initial(), { type: "removeMember", id: "kid" });
     expect(kept.input.members.map(m => m.id)).toContain("kid");

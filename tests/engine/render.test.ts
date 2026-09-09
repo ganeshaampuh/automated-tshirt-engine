@@ -33,6 +33,28 @@ describe("renderDesign", () => {
     expect(blue).toBeGreaterThan(1000);
   });
 
+
+  it("draws later layers over earlier ones, so the stack order is what the export shows", async () => {
+    const block = (id: string, color: string) => ({
+      id, type: "text" as const, text: "5", font: "Fredoka", weight: 700 as const, size: 400, color,
+      align: "center" as const, x: 0, y: 30, maxWidth: 500, lines: 1,
+    });
+    const base = { version: 2 as const, sizeClass: "adult" as const, canvas: { w: 500, h: 500, dpi: 300 as const }, shirtColor: "#ffffff" };
+    const render = (layers: ReturnType<typeof block>[]) =>
+      renderDesign({ ...base, layers }, { scale: 1, loadImage: loadImageFromFile }).then(b => PNG.sync.read(b));
+
+    // Two identical numerals in different inks: whichever is drawn last owns every inked pixel.
+    const redOnTop = await render([block("a", "#0000ff"), block("b", "#ff0000")]);
+    const blueOnTop = await render([block("b", "#ff0000"), block("a", "#0000ff")]);
+
+    // Probe a pixel the glyph fills solidly, not one of its antialiased edges.
+    let i = 0;
+    while (i < redOnTop.data.length && redOnTop.data[i + 3] !== 255) i += 4;
+    expect(i).toBeLessThan(redOnTop.data.length);
+    expect([...redOnTop.data.slice(i, i + 3)]).toEqual([255, 0, 0]);
+    expect([...blueOnTop.data.slice(i, i + 3)]).toEqual([0, 0, 255]);
+  });
+
   it("draws the shadow for text that has no stroke", async () => {
     const layer = (shadow: boolean): Design["layers"][number] => ({
       id: "n", type: "text", text: "5", font: "Fredoka", weight: 700, size: 300, color: "#ff0000",

@@ -68,6 +68,10 @@ export const MemberSchema = z.object({
   // keyed by layer id → partial layer fields (x, y, w, h, size, color, ...). Validated loosely here;
   // applyOverrides only spreads known keys onto an existing layer, and DesignSchema re-validates the result.
   overrides: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
+  // The stacking this member's design is drawn in: layer ids back to front, the direction the
+  // renderers walk `design.layers`. Absent — as it is on every set saved before layering existed —
+  // means the template's own order. `applyOrder` decides what a stale list means.
+  order: z.array(z.string()).optional(),
 });
 export type Member = z.infer<typeof MemberSchema>;
 
