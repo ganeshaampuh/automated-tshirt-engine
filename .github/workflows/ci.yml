@@ -10,15 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # No `version:` here on purpose. `packageManager` in package.json already
+      # pins the exact pnpm, and action-setup@v6 errors out if both are given.
       - uses: pnpm/action-setup@v6
-        with: { version: 11 }
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc --noEmit
       - run: pnpm lint
-      # No DATABASE_URL is provided in CI, so the two specs that need it
-      # skip by design. CI=true also makes tests/engine/golden.ts hard-fail
-      # on a missing golden image instead of writing one.
+      # Neither DATABASE_URL nor ALLOW_DB_TESTS is set in CI, so every spec that
+      # writes real rows skips by design and reports itself as skipped. CI=true
+      # also makes tests/engine/golden.ts hard-fail on a missing golden image
+      # instead of quietly writing one.
       - run: pnpm test
         env: { CI: "true" }
