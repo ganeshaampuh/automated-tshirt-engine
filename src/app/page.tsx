@@ -2,10 +2,23 @@ import Link from "next/link";
 import { desc } from "drizzle-orm";
 import { SetInputSchema } from "@/engine";
 import { db, schema } from "@/db";
+import { type SetStatus } from "@/lib/memberState";
 
 export const dynamic = "force-dynamic";
 
-const STATUS: Record<string, string> = { draft: "Draft", ready: "Siap", error: "Gagal" };
+const STATUS: Record<SetStatus, string> = {
+  draft: "Draft",
+  queued: "Antrean",
+  processing: "Diproses",
+  ready: "Siap",
+  approved: "Disetujui",
+  rejected: "Ditolak",
+  failed: "Gagal",
+};
+
+function statusLabel(status: string): string {
+  return status in STATUS ? STATUS[status as SetStatus] : status;
+}
 
 const when = (d: Date) =>
   new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d);
@@ -56,7 +69,7 @@ export default async function Home() {
                       {input.age} tahun, {input.members.length} kaos
                     </span>
                   )}
-                  <span className="ml-auto text-[12px] text-muted">{STATUS[row.status] ?? row.status}</span>
+                  <span className="ml-auto text-[12px] text-muted">{statusLabel(row.status)}</span>
                   <span className="w-[104px] text-right font-mono text-[12px] text-muted tabular-nums">{when(row.updatedAt)}</span>
                 </Link>
               </li>

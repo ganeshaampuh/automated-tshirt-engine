@@ -14,6 +14,7 @@ import { clipartSize, exportSetZip } from "@/lib/sets";
 import { RemoteImageError } from "@/lib/remoteImage";
 import { processClipartUpload } from "@/lib/clipartUpload";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE } from "@/lib/upload";
+import { initialStates, setMemberState, type MemberStates } from "@/lib/memberState";
 
 const { sets } = schema;
 
@@ -162,6 +163,15 @@ export async function generateStyleAction(
   });
 }
 
+/** Builds `memberStates` for a freshly exported set: every member is `ready` with its cm figures. */
+function readyMemberStates(memberIds: string[], sizes: Record<string, { widthCm: number; heightCm: number }>): MemberStates {
+  let states = initialStates(memberIds);
+  for (const [memberId, size] of Object.entries(sizes)) {
+    states = setMemberState(states, memberId, { status: "ready", widthCm: size.widthCm, heightCm: size.heightCm });
+  }
+  return states;
+}
+
 export async function exportSetAction(
   id: string,
 ): Promise<ActionResult<{ zipUrl: string; sizes: Record<string, { widthCm: number; heightCm: number }> }>> {
@@ -180,7 +190,7 @@ export async function exportSetAction(
     // `status` is deliberately untouched: `exportUrl` is the record that an export happened, and a
     // re-export must not demote a set someone has already approved.
     try {
-      await write(id, { exportUrl: zipUrl });
+      await write(id, { exportUrl: zipUrl, memberStates: readyMemberStates(input.members.map(m => m.id), sizes) });
     } catch (e) {
       fail("Gagal menyimpan hasil export.", e);
     }
