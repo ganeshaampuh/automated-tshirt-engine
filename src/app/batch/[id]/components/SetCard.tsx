@@ -102,14 +102,15 @@ export function SetCard({
           Tolak
         </Button>
         {/* Pushed to the far end, away from Tolak: the two verdicts read alike in a hurry and only
-            one of them can be taken back. Refused while a tick may still write to the row. */}
+            one of them can be taken back. Unlike its neighbours it stays live while the set is being
+            drawn — a verdict on artwork that does not exist yet is meaningless, but calling off the
+            drawing is exactly what a shop wants at that moment, and the label says so. */}
         <ConfirmButton
           className="ml-auto"
           testId="delete-set"
-          confirm={`Hapus ${kidName}?`}
-          disabled={busy}
+          confirm={busy ? `Hentikan & hapus ${kidName}?` : `Hapus ${kidName}?`}
           pending={pending === `delete:${row.id}`}
-          title={busy ? "Set ini masih diproses" : `Hapus set ${kidName} untuk selamanya`}
+          title={busy ? `Hentikan penggambaran ${kidName} dan hapus setnya` : `Hapus set ${kidName} untuk selamanya`}
           onConfirm={onDelete}
         >
           Hapus

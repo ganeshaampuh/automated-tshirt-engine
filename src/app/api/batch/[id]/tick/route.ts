@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { AIError, getProvider, type AIProvider } from "@/ai";
 import { createNodeMeasurer, loadImageFromFile } from "@/engine/server";
 import { db, schema } from "@/db";
 import { claimableSets } from "@/db/claimSets";
-import { putBlob } from "@/lib/blob";
+import { deleteBlobs, putBlob } from "@/lib/blob";
 import { processSet, TICK_BATCH, type ProcessDeps, type ProcessResult } from "@/lib/processSet";
+import { orphanBlobs } from "@/lib/tickCleanup";
 import { tickOrigin } from "@/lib/tickOrigin";
 
 const { batches, sets } = schema;
@@ -90,6 +91,25 @@ async function countByStatus(id: string) {
   return (status: string) => rows.find(r => r.status === status)?.n ?? 0;
 }
 
+/** What `survivors` answers with when the batch itself has been deleted: nothing survived. */
+const GONE: ReadonlySet<string> = new Set();
+
+/**
+ * Which of the sets this tick was holding still exist — empty, and identically `GONE`, if the whole
+ * batch has been deleted under it.
+ *
+ * One read for the batch and one for the rows, taken after the rendering rather than before: the
+ * delete the shop pressed may have landed at any point while `processSet` was working, and only the
+ * state now decides what is worth writing.
+ */
+async function survivors(batchId: string, setIds: string[]): Promise<ReadonlySet<string>> {
+  const batch = await db.query.batches.findFirst({ where: eq(batches.id, batchId), columns: { id: true } });
+  if (!batch) return GONE;
+  if (setIds.length === 0) return new Set();
+  const rows = await db.select({ id: sets.id }).from(sets).where(inArray(sets.id, setIds));
+  return new Set(rows.map(r => r.id));
+}
+
 const writeFor = (setId: string, out: ProcessResult) =>
   db
     .update(sets)
@@ -142,8 +162,26 @@ export async function POST(
   // and strand the other two in `processing`.
   const results = await Promise.all(claimed.map(async row => [row.id, await processSet(row, deps)] as const));
 
-  if (results.length > 0) {
-    const writes = results.map(([setId, out]) => writeFor(setId, out));
+  // The cancel check, and the reason a delete no longer waits for the server to be idle: rendering a
+  // set takes up to a minute and the shop may have deleted this batch — or these very sets — while
+  // it ran. Nothing can kill a function from outside, so the tick asks, once, whether the work it is
+  // holding still belongs to anybody. The database writes would land on nothing by themselves; what
+  // has to be undone by hand are the previews and clipart already sitting in Blob storage.
+  const alive = await survivors(id, results.map(([setId]) => setId));
+  const rowsById = new Map(claimed.map(row => [row.id, row]));
+  const dropped = results.filter(([setId]) => !alive.has(setId));
+  if (dropped.length > 0) {
+    await deleteBlobs(dropped.flatMap(([setId, out]) => orphanBlobs(rowsById.get(setId)!, out)));
+  }
+  // The batch itself is gone: there is no roll-up to write and, above all, no next tick to start —
+  // this is where the chain ends rather than running on through a batch nobody can see.
+  if (alive === GONE) {
+    return NextResponse.json({ cancelled: true, processed: 0, remaining: 0 });
+  }
+
+  const kept = results.filter(([setId]) => alive.has(setId));
+  if (kept.length > 0) {
+    const writes = kept.map(([setId, out]) => writeFor(setId, out));
     // `db.batch` wants a non-empty tuple; the length is checked right above.
     await db.batch(writes as [(typeof writes)[number], ...typeof writes]);
   }
@@ -167,5 +205,5 @@ export async function POST(
 
   if (queued > 0) chain(request, id);
 
-  return NextResponse.json({ processed: results.length, remaining: queued });
+  return NextResponse.json({ processed: kept.length, remaining: queued });
 }

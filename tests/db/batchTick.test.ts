@@ -6,6 +6,14 @@ import { createNodeMeasurer, loadImageFromFile } from "@/engine/server";
 import type { ProcessDeps } from "@/lib/processSet";
 import { liveDb } from "./live";
 
+// `deleteBlobs` is the one thing the cancel path reaches for directly rather than through `deps`,
+// and a test database has no Blob store behind it. Spied, not stubbed out: every other export of
+// the module keeps its real implementation.
+vi.mock("@/lib/blob", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/blob")>();
+  return { ...actual, deleteBlobs: vi.fn(async () => {}) };
+});
+
 /**
  * The whole chain against a real database: a batch of four sets — one more than a tick's `TICK_BATCH`
  * of three — driven until it reports no work left.
@@ -123,6 +131,61 @@ describe.skipIf(!liveDb)("POST /api/batch/[id]/tick", () => {
       // A finished batch is not reopened by a stale kick.
       const late = await tick(id);
       expect(late.body).toMatchObject({ processed: 0, remaining: 0, skipped: true });
+    } finally {
+      await db.delete(schema.sets).where(eq(schema.sets.batchId, id));
+      await db.delete(schema.batches).where(eq(schema.batches.id, id));
+    }
+  }, 90_000);
+
+  /**
+   * The cancel path: the shop deletes the batch while a tick is rendering it.
+   *
+   * There is no way to kill a function from outside, so the tick has to notice for itself. The
+   * delete is staged from inside `putBlob` — the moment the tick is provably mid-set — which is as
+   * close to the real race as a test can stand.
+   */
+  it("throws its work away and cleans up its uploads when the batch is deleted mid-tick", async () => {
+    const { eq } = await import("drizzle-orm");
+    const { db, schema } = await import("@/db");
+    const { parseBatchRows } = await import("@/lib/csv");
+    const { rowsToInserts } = await import("@/lib/batchInserts");
+    const { deleteBlobs } = await import("@/lib/blob");
+    const { POST } = await import("@/app/api/batch/[id]/tick/route");
+
+    const { rows } = parseBatchRows(csvWithClipart(await smallClipart(), 1));
+    const wanted = rows.slice(0, 1);
+    const id = crypto.randomUUID();
+    await db.batch([
+      db.insert(schema.batches).values({ id, name: "cancel test", status: "processing", setCount: 1, csvUrl: "https://blob.test/none.csv" }),
+      db.insert(schema.sets).values(rowsToInserts(id, wanted)),
+    ]);
+
+    const uploaded: string[] = [];
+    const deps = stubDeps();
+    let deleted = false;
+    deps.putBlob = vi.fn(async (path: string) => {
+      // The first upload is a member preview, so by here the tick is committed to this set.
+      if (!deleted) {
+        deleted = true;
+        await db.delete(schema.sets).where(eq(schema.sets.batchId, id));
+        await db.delete(schema.batches).where(eq(schema.batches.id, id));
+      }
+      const url = `https://blob.test/${path}`;
+      uploaded.push(url);
+      return url;
+    });
+
+    try {
+      const res = await POST(
+        new Request(`http://localhost:3000/api/batch/${id}/tick`, { method: "POST" }),
+        { params: Promise.resolve({ id }) },
+        deps,
+      );
+      expect(await res.json()).toMatchObject({ cancelled: true });
+      expect(uploaded.length).toBeGreaterThan(0);
+      // Every file this tick put in the store is handed back for removal; nothing is left pointing
+      // at a row that no longer exists.
+      expect(deleteBlobs).toHaveBeenCalledWith(expect.arrayContaining(uploaded));
     } finally {
       await db.delete(schema.sets).where(eq(schema.sets.batchId, id));
       await db.delete(schema.batches).where(eq(schema.batches.id, id));

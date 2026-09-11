@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import sharp from "sharp";
 import { readFileSync } from "node:fs";
-import { generateClipart, describeClipart, removeWhiteBackground, dominantColors } from "@/ai/clipart";
+import { generateClipart, describeClipart, removeWhiteBackground, dominantColors, clearDescribeCacheForTests } from "@/ai/clipart";
 import type { AIProvider } from "@/ai/provider";
+import * as sets from "@/lib/sets";
 
 const unicorn = readFileSync("tests/fixtures/unicorn.png");
 
@@ -58,5 +59,59 @@ describe("describeClipart", () => {
     const provider: AIProvider = { generateImage: vi.fn(), chatJSON: vi.fn(async () => { throw new Error("down"); }) };
     const meta = await describeClipart(unicorn, { provider });
     expect(meta.kind).toBe("illustration"); expect(meta.caption).toBe("");
+  });
+});
+
+describe("describeClipart caching", () => {
+  beforeEach(() => { clearDescribeCacheForTests(); vi.restoreAllMocks(); });
+
+  /** A provider that captions, plus a stubbed fetch so no request leaves the test. */
+  const spy = (caption = "a cute unicorn") => {
+    const chatJSON = vi.fn(async () => ({ caption, kind: "illustration" }));
+    vi.spyOn(sets, "fetchBytes").mockResolvedValue(unicorn);
+    return { provider: { generateImage: vi.fn(), chatJSON } as unknown as AIProvider, chatJSON };
+  };
+
+  it("describes a blob url once, however many times the style is regenerated", async () => {
+    const { provider, chatJSON } = spy();
+    const a = await describeClipart("https://blob/clipart-1.png", { provider });
+    const b = await describeClipart("https://blob/clipart-1.png", { provider });
+    expect(chatJSON).toHaveBeenCalledTimes(1);
+    expect(b).toEqual(a);
+  });
+
+  it("describes a different clipart separately", async () => {
+    const { provider, chatJSON } = spy();
+    await describeClipart("https://blob/clipart-1.png", { provider });
+    await describeClipart("https://blob/clipart-2.png", { provider });
+    expect(chatJSON).toHaveBeenCalledTimes(2);
+  });
+
+  it("collapses two presses that race into one description", async () => {
+    const { provider, chatJSON } = spy();
+    await Promise.all([
+      describeClipart("https://blob/clipart-1.png", { provider }),
+      describeClipart("https://blob/clipart-1.png", { provider }),
+    ]);
+    expect(chatJSON).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not pin a caption the vision model failed to produce", async () => {
+    vi.spyOn(sets, "fetchBytes").mockResolvedValue(unicorn);
+    const chatJSON = vi.fn()
+      .mockRejectedValueOnce(new Error("down"))
+      .mockResolvedValueOnce({ caption: "a cute unicorn", kind: "illustration" });
+    const provider = { generateImage: vi.fn(), chatJSON } as unknown as AIProvider;
+    expect((await describeClipart("https://blob/clipart-1.png", { provider })).caption).toBe("");
+    expect((await describeClipart("https://blob/clipart-1.png", { provider })).caption).toBe("a cute unicorn");
+    expect(chatJSON).toHaveBeenCalledTimes(2);
+  });
+
+  it("never keys on a data: src — the payload would be its own key", async () => {
+    const { provider, chatJSON } = spy();
+    const src = `data:image/png;base64,${unicorn.toString("base64")}`;
+    await describeClipart(src, { provider });
+    await describeClipart(src, { provider });
+    expect(chatJSON).toHaveBeenCalledTimes(2);
   });
 });

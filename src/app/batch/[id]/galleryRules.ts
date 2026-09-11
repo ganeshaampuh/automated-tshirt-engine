@@ -124,33 +124,39 @@ export function statusSignature(rows: { id: string; status: string; memberStates
 }
 
 /**
- * Which of the ids asked for may actually be deleted: everything among `rows` that no tick is
- * holding.
+ * Which of the ids asked for may actually be deleted: everything the caller can see.
  *
- * Wider than `approvable` on purpose. An approval only ever moves a `ready` set, but the sets a
- * shop most wants gone are the failed and the rejected ones, so every settled status qualifies.
- * `isUnderway` is the whole guard: a `queued` or `processing` row belongs to a tick that will write
- * its result back, and deleting it under that tick leaves the write with no row to land on.
+ * Wider than `approvable` twice over. An approval only ever moves a `ready` set, but the sets a
+ * shop most wants gone are the failed and the rejected ones — and, since a delete is also how a
+ * shop cancels work it no longer wants, a `queued` or `processing` set goes too. That used to be
+ * refused on the grounds that a tick would be left writing to a row that no longer exists, but the
+ * tick's write-back is `where id = ...` and its roll-up `where status = 'processing'`: both simply
+ * touch no rows once the delete has landed. What the tick does instead is notice, in
+ * `src/app/api/batch/[id]/tick/route.ts`, that its batch is gone — then it throws away the work it
+ * had in hand, takes its own uploads back out of Blob storage, and starts no next tick.
  *
  * Scoped exactly as `approvable` is — an id absent from `rows` is dropped, and the caller decides
  * what `rows` holds. See that function for why the app's no-accounts posture makes this the
  * existing stance rather than a hole opened here.
  */
 export function deletable(ids: string[], rows: StatusRow[]): string[] {
-  const settled = new Set(rows.filter(r => !isUnderway(r.status)).map(r => r.id));
-  return [...new Set(ids)].filter(id => settled.has(id));
+  const known = new Set(rows.map(r => r.id));
+  return [...new Set(ids)].filter(id => known.has(id));
 }
 
 /**
- * Whether a whole batch may be deleted.
+ * The sentence on the "Hapus batch" confirmation.
  *
- * The two refusals are the two states with a live function behind them: `processing` has a tick
- * claiming sets, `exporting` has a route streaming a ZIP out of them. Deleting either would leave
- * that function writing to rows that no longer exist — and, worse, a tick that re-opens the batch
- * row it is holding would resurrect a batch the shop believes it deleted.
- *
- * Unlike the export's own stale-window escape, there is no time-based override here: a delete is
- * the one verdict that cannot be walked back, so a batch wedged at `exporting` is cleared with
- * "Lanjutkan" or the export retry first, and deleted afterwards.
+ * A delete no longer waits for the server to be idle, so the wording carries the whole warning:
+ * with the guard gone it is the only thing standing between a shop and a batch it is halfway
+ * through rendering. It promises to stop a process only when one is really in flight — a batch left
+ * at `processing` by a tick that died before its own roll-up has nothing running behind it, and
+ * offering to "hentikan prosesnya" there would name work that does not exist.
  */
-export const batchDeletable = (batchStatus: string) => batchStatus !== "processing" && batchStatus !== "exporting";
+export function deleteWarning(c: GalleryCounts, batchStatus: string): string {
+  if (batchStatus === "exporting") return "Batch ini sedang membuat ZIP. Hapus dan hentikan ekspornya?";
+  if (batchStatus === "processing" && isBusy(c)) {
+    return `Batch ini masih memproses ${c.queued + c.processing} set. Hapus dan hentikan prosesnya?`;
+  }
+  return `Hapus batch dan ${c.total} set-nya?`;
+}

@@ -27,6 +27,12 @@ export class ZaiProvider implements AIProvider {
     const json = (await this.post("/chat/completions", {
       model: images?.length ? MODELS.vision : MODELS.text, temperature: 0.4,
       response_format: { type: "json_object" },
+      // GLM-4.5 reasons out loud unless told not to, and Z.ai leaves that on by default. Both calls
+      // here want one small JSON object from a one-paragraph prompt, and the chain of thought
+      // preceding it cost more than everything else the shop waits for: measured against the live
+      // API, the style call fell from ~45s to ~4s and the vision call from ~9s to ~2s, with the same
+      // captions and palettes coming back. Turn it on again only for a prompt that needs deliberation.
+      thinking: { type: "disabled" },
       messages: [{ role: "system", content: system }, { role: "user", content }],
     })) as { choices?: { message?: { content?: string } }[] };
     const raw = json.choices?.[0]?.message?.content ?? "";

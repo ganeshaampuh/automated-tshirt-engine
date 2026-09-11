@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { and, asc, eq, gt } from "drizzle-orm";
 import { createNodeMeasurer, loadImageFromFile } from "@/engine/server";
 import { db, schema } from "@/db";
-import { putBlobStream } from "@/lib/blob";
+import { deleteBlob, putBlobStream } from "@/lib/blob";
 import { streamBatchZip, type BatchZipDeps } from "@/lib/batchZip";
 import { clipartSize } from "@/lib/sets";
 import type { SetRow } from "@/db/schema";
@@ -89,6 +89,18 @@ export async function POST(
   try {
     const deadline = Date.now() + maxDuration * 1000 - CLOSING_MARGIN_MS;
     const out = await streamBatchZip({ batchId: id, sets: approvedSets(id), deps, put: putBlobStream, deadline });
+
+    // The cancel check. A delete no longer waits for this route to finish, so the batch may have
+    // been removed at any point in the minutes above. Every verdict below is written `where id = ...`
+    // and would simply touch no rows, but the ZIP is already in Blob storage with nothing left to
+    // link to it — so it is taken back out, and the route reports what happened rather than an
+    // export failure the shop would be invited to retry.
+    const still = await db.query.batches.findFirst({ where: eq(batches.id, id), columns: { id: true } });
+    if (!still) {
+      await deleteBlob(out.url);
+      return NextResponse.json({ cancelled: true });
+    }
+
     if (out.files === 0) {
       await db.update(batches).set({ status: "ready", error: NOTHING, updatedAt: new Date() }).where(eq(batches.id, id));
       return NextResponse.json({ error: NOTHING }, { status: 409 });
