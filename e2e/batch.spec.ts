@@ -113,6 +113,48 @@ test.describe(() => {
     await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
     await expect(page.getByRole("link", { name: batchName })).toHaveCount(0);
   });
+
+  /**
+   * Cancelling: the shop changes its mind while the chain is still drawing.
+   *
+   * The delete is pressed with sets still `queued` or `processing`, which used to be refused — the
+   * button was not even rendered. What this pins is the part a unit test cannot reach: the batch
+   * goes at once, and it stays gone. A tick that was mid-set when the row vanished must not write
+   * anything that brings the batch back onto the home page, so the absence is asserted again after
+   * the longest a live tick can still be running for.
+   */
+  test("cancels a batch by deleting it while it is still drawing", async ({ page }) => {
+    test.setTimeout(300_000);
+
+    const csv = await buildCsv();
+    const batchName = `batch-cancel-e2e-${Date.now()}.csv`;
+
+    await page.goto("/batch/new");
+    await page.getByTestId("csv-input").setInputFiles({ name: batchName, mimeType: "text/csv", buffer: csv });
+    await page.getByTestId("check").click();
+    await expect(page.getByTestId("report-counts")).toHaveText("3 set, 10 kaos", { timeout: 30_000 });
+    await page.getByTestId("create").click();
+    await expect(page).toHaveURL(/\/batch\/[0-9a-f-]{36}$/, { timeout: 60_000 });
+
+    // Deleted while the work is provably still in flight, not after it has quietly finished.
+    await expect
+      .poll(async () => (await readCards(page)).filter(c => c.status === "queued" || c.status === "processing").length, {
+        timeout: 60_000,
+        intervals: [500],
+      })
+      .toBeGreaterThan(0);
+
+    await page.getByTestId("delete-batch").click();
+    await page.getByTestId("delete-batch-confirm").click();
+    await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
+    await expect(page.getByRole("link", { name: batchName })).toHaveCount(0);
+
+    // The tick that was holding a set has up to its whole budget left to run. Give it that, then
+    // ask again: a batch that comes back is the failure this whole path exists to prevent.
+    await page.waitForTimeout(90_000);
+    await page.reload();
+    await expect(page.getByRole("link", { name: batchName })).toHaveCount(0);
+  });
 });
 
 type Card = { kid: string; status: string | null; error: string };

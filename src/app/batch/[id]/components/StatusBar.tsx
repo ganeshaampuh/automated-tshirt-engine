@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button, ConfirmButton } from "@/app/components/ui";
-import { batchDeletable, progressFraction, progressLine, isBusy, resumeOffered, type GalleryCounts } from "../galleryRules";
+import { deleteWarning, progressFraction, progressLine, isBusy, resumeOffered, type GalleryCounts } from "../galleryRules";
 
 /**
  * The bench's header: what the batch is, how far it has got, and — only while something is still
@@ -82,22 +82,21 @@ export function StatusBar({
             Lanjutkan
           </Button>
         )}
-        {/* Hidden, not merely disabled, while a tick or an export is still running: the action
-            refuses those outright and there is no stale-window retry to reach, so a greyed-out
-            button would only pose a question the page cannot answer. `ml-auto` on whichever of the
-            two controls comes first keeps both pinned to the right. */}
-        {batchDeletable(batchStatus) && (
-          <ConfirmButton
-            className={resumeOffered(counts, batchStatus) ? "" : "ml-auto"}
-            testId="delete-batch"
-            confirm={`Hapus batch dan ${counts.total} set-nya?`}
-            pending={deleting}
-            title="Hapus batch ini beserta semua setnya untuk selamanya"
-            onConfirm={onDelete}
-          >
-            Hapus batch
-          </ConfirmButton>
-        )}
+        {/* Always offered, whatever the batch is busy with: deleting is also how a shop cancels a
+            batch it no longer wants drawn, so hiding the button while a tick runs would take the
+            cancel away with it. What carries the warning instead is `deleteWarning`, which names
+            the work the second click is about to stop. `ml-auto` on whichever of the two controls
+            comes first keeps both pinned to the right. */}
+        <ConfirmButton
+          className={resumeOffered(counts, batchStatus) ? "" : "ml-auto"}
+          testId="delete-batch"
+          confirm={deleteWarning(counts, batchStatus)}
+          pending={deleting}
+          title="Hapus batch ini beserta semua setnya untuk selamanya"
+          onConfirm={onDelete}
+        >
+          Hapus batch
+        </ConfirmButton>
       </div>
       <div
         className="h-1 w-full bg-bench"

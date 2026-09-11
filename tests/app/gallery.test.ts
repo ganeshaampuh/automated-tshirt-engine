@@ -5,8 +5,8 @@ import { strandedSets } from "@/db/claimSets";
 import { STALE_CLAIM_MINUTES, TICK_MAX_SECONDS } from "@/lib/processSet";
 import {
   approvable,
-  batchDeletable,
   deletable,
+  deleteWarning,
   EXPORT_STALE_MS,
   exportRetryable,
   galleryCounts,
@@ -215,8 +215,9 @@ describe("tick budget", () => {
 });
 
 /**
- * Deletion is the one verdict that cannot be undone, so its rule is the strictest one here: a set a
- * tick may still be holding is never removed, and an id the caller cannot see is never guessed at.
+ * A delete now reaches every set the caller can see, a set a tick is still holding included: the
+ * tick discovers its row is gone and throws its own work away. The one rule left is scoping — an id
+ * the caller cannot see is never guessed at.
  */
 describe("deletable", () => {
   it("keeps every settled set, whatever verdict it carries", () => {
@@ -224,9 +225,9 @@ describe("deletable", () => {
     expect(deletable(settled.map(r => r.id), settled)).toEqual(["s1", "s2", "s3", "s4"]);
   });
 
-  it("refuses a set a tick may still be holding", () => {
+  it("takes a set a tick is still holding, which is what cancels it", () => {
     const mixed = rows("queued", "processing", "ready");
-    expect(deletable(["s1", "s2", "s3"], mixed)).toEqual(["s3"]);
+    expect(deletable(["s1", "s2", "s3"], mixed)).toEqual(["s1", "s2", "s3"]);
   });
 
   it("drops an id that is not among the rows at all", () => {
@@ -251,16 +252,32 @@ describe("deletable", () => {
 });
 
 /**
- * A batch is deletable only when nothing on the server is still writing to it. `processing` has a
- * tick claiming its sets; `exporting` has a route streaming a ZIP out of them. Deleting either
- * would leave a live function writing to rows that no longer exist.
+ * The confirm line on "Hapus batch". A delete can now stop live work, so the sentence has to say so
+ * before the shop presses it — the wording is the only warning left once the guard is gone.
  */
-describe("batchDeletable", () => {
-  it.each(["ready", "exported", "failed"])("allows a batch that has settled at %s", status => {
-    expect(batchDeletable(status)).toBe(true);
+describe("deleteWarning", () => {
+  const counts = (over: Partial<ReturnType<typeof galleryCounts>> = {}) => ({
+    ...galleryCounts(rows("ready", "ready", "ready")),
+    ...over,
   });
 
-  it.each(["processing", "exporting"])("refuses a batch still working at %s", status => {
-    expect(batchDeletable(status)).toBe(false);
+  it("names the work it will stop while a tick is still claiming sets", () => {
+    expect(deleteWarning(counts({ queued: 4, processing: 2 }), "processing")).toBe(
+      "Batch ini masih memproses 6 set. Hapus dan hentikan prosesnya?",
+    );
+  });
+
+  it("names the export it will stop while a ZIP is being written", () => {
+    expect(deleteWarning(counts(), "exporting")).toBe("Batch ini sedang membuat ZIP. Hapus dan hentikan ekspornya?");
+  });
+
+  it("asks the plain question for a batch that has settled", () => {
+    expect(deleteWarning(counts(), "ready")).toBe("Hapus batch dan 3 set-nya?");
+  });
+
+  // A tick that died before its own roll-up leaves the batch at `processing` with nothing in flight.
+  // There is no process to stop, so promising to stop one would be a lie.
+  it("asks the plain question for a batch left open by a dead tick", () => {
+    expect(deleteWarning(counts(), "processing")).toBe("Hapus batch dan 3 set-nya?");
   });
 });
