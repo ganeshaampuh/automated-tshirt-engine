@@ -31,6 +31,17 @@ describe("ZaiProvider.chatJSON", () => {
     await p.chatJSON({ system: "s", user: "u", images: ["https://x/y.png"], schema: z.object({ kind: z.string() }) });
   });
 
+  it("turns the model's reasoning off — it is what made a style take a minute", async () => {
+    const fetchMock = vi.fn(async (_u: string, init: RequestInit) => {
+      expect(JSON.parse(init.body as string).thinking).toEqual({ type: "disabled" });
+      return ok({ choices: [{ message: { content: "{}" } }] });
+    });
+    const p = new ZaiProvider({ apiKey: "k", fetch: fetchMock as unknown as typeof fetch });
+    await p.chatJSON({ system: "s", user: "u", schema: z.object({}) });
+    await p.chatJSON({ system: "s", user: "u", images: ["https://x/y.png"], schema: z.object({}) });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("strips ```json fences and throws AIError with raw text on schema failure", async () => {
     const fetchMock = vi.fn(async () => ok({ choices: [{ message: { content: "```json\n{\"font\":42}\n```" } }] }));
     const p = new ZaiProvider({ apiKey: "k", fetch: fetchMock as unknown as typeof fetch });
