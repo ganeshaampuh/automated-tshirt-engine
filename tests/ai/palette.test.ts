@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { accentColor, distinct, HOUSE_ACCENT, tint, toHsl } from "@/ai/palette";
+import { accentColor, derivePalette, distinct, HOUSE_ACCENT, tint, toHsl } from "@/ai/palette";
 import { contrastRatio } from "@/ai/style";
 
 /** The real output of `dominantColors` on the two cliparts this repo ships. */
@@ -65,5 +65,31 @@ describe("distinct", () => {
 
   it("accepts a colour against a tint of itself", () => {
     expect(distinct("#e6007e", tint("#e6007e", 0.55))).toBe(true);
+  });
+});
+
+/**
+ * The whole palette from a clipart's colours — one definition, shared by the no-AI style and by the
+ * upload that now recolours a set the moment its artwork changes.
+ */
+describe("derivePalette", () => {
+  it("builds the three inks around the artwork's accent", () => {
+    const p = derivePalette(HELLO_KITTY, "#ffffff");
+    expect(p.outline).toBe(p.primary);
+    expect(p.secondary).toBe(tint(p.primary, 0.55));
+    expect(toHsl(p.primary).s).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("keeps the numeral fill visible on a dark shirt", () => {
+    expect(contrastRatio(derivePalette(HELLO_KITTY, "#000000").secondary, "#000000")).toBeGreaterThanOrEqual(1.6);
+  });
+
+  it("keeps the text readable on a shirt its own colour", () => {
+    // A red clipart on a red shirt: the accent cannot be used as found.
+    expect(contrastRatio(derivePalette(["#ff4444"], "#ff4444").primary, "#ff4444")).toBeGreaterThanOrEqual(3);
+  });
+
+  it("falls back to the house colour for line art", () => {
+    expect(derivePalette(["#222222", "#111111"], "#ffffff").primary).toBe(HOUSE_ACCENT);
   });
 });
