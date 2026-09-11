@@ -15,7 +15,9 @@ with human review before export.
 AI (Z.ai GLM / CogView models) generates the theme clipart and chooses palette,
 font, and wording. **Layout is a deterministic template**, never AI-placed.
 
-Reference sample: `docs/samples/` (unicorn set: Ayah, Keisya, Kenzi, Mama).
+Reference sample: `docs/samples/` — `single_ayah.png`, `single_anak.png`, `single_mama.png` for
+the three member variants, `batch_sample.png` for a set of three, `clipart.png` for the artwork
+they are built from. The collage template's proportions are taken from `single_ayah.png`.
 
 ## 2. Scope
 

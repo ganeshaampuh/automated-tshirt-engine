@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { collage, NUMERAL_START_FRACTION } from "@/engine/templates/collage";
 import { createNodeMeasurer } from "@/engine/measure";
-import { isWithinSafeArea, boundingBoxCm, layerBounds, maxCm, canvasFor, safeArea } from "@/engine/sizing";
+import { boundingBox, isWithinSafeArea, boundingBoxCm, layerBounds, maxCm, canvasFor, safeArea } from "@/engine/sizing";
 import { unicornSet, CLIPART_SIZE } from "../fixtures/set-unicorn";
 import type { TextLayer, ImageLayer } from "@/engine/types";
 
@@ -65,11 +65,13 @@ describe("collage template", () => {
               .toBeLessThanOrEqual(A.y + A.h - 0.004 * d.canvas.w);
           }
 
-          // The clipart is allowed to overlap the numeral (they are composed as one unit), but no
-          // other text slot may collide with it, ink allowance included.
+          // The clipart is allowed to overlap the numeral and the ordinal — in the reference sample
+          // all three are composed as one mass, the small ordinal tucked into the artwork's own
+          // negative space. The two full-width bands are the ones that must stay clear of it: a
+          // name or a member label drawn across the artwork is the collision that ruins a shirt.
           const c = layerBounds(image(d, "clipart"));
           for (const l of d.layers) {
-            if (l.type !== "text" || l.id === "numeral") continue;
+            if (l.type !== "text" || l.id === "numeral" || l.id === "ordinal") continue;
             const b = layerBounds(l);
             const overlaps = b.x < c.x + c.w && c.x < b.x + b.w && b.y < c.y + c.h && c.y < b.y + b.h;
             expect(overlaps, `${lang}/${variant.name}/${m.label}: ${l.id} overlaps clipart`).toBe(false);
@@ -77,6 +79,42 @@ describe("collage template", () => {
         }
       }
     }
+  });
+
+  /**
+   * The composition is a portrait block, not a square one — `docs/samples/single_ayah.png` is
+   * 2630x3389 and the artwork fills it. The canvas stays square because that is the print envelope
+   * (`canvasFor`), so what has to be portrait is the ink: the block runs the full height of the
+   * safe area and leaves the side margins that the ratio implies.
+   */
+  describe("portrait composition", () => {
+    /** The reference sample's own width:height, and the slack a shrunken slot may move it by. */
+    const SAMPLE_RATIO = 0.776;
+
+    it.each(["en", "id"] as const)("keeps the reference sample's proportions in %s", lang => {
+      const s = unicornSet(lang);
+      for (const m of s.input.members) {
+        const b = boundingBox(collage(s, m, ctx));
+        expect(b.w / b.h, `${lang}/${m.id}`).toBeGreaterThan(SAMPLE_RATIO - 0.08);
+        expect(b.w / b.h, `${lang}/${m.id}`).toBeLessThan(SAMPLE_RATIO + 0.08);
+      }
+    });
+
+    it("fills the height it is given rather than floating in the middle", () => {
+      const d = collage(set, set.input.members[0], ctx);
+      const A = safeArea(canvasFor("adult"));
+      expect(boundingBox(d).h).toBeGreaterThan(0.95 * A.h);
+    });
+
+    // Every line in the sample is set in caps. The renderer applies `transform` before drawing, so
+    // this is also what `fitText` has to have measured — a slot that is uppercased at draw time but
+    // measured in mixed case overflows its box.
+    it("sets every line in caps, the way the sample does", () => {
+      const d = collage(set, set.input.members[0], ctx);
+      for (const id of ["top", "ordinal", "occasion", "bottom"]) {
+        expect(text(d, id).transform, id).toBe("upper");
+      }
+    });
   });
 
   it("clipart preserves aspect ratio and overlaps the numeral", () => {
@@ -106,15 +144,30 @@ describe("collage template", () => {
     expect(measure.width(n10.text, n10.font, n10.weight, n10.size)).toBeLessThanOrEqual(n10.maxWidth);
     expect(measure.width(n100.text, n100.font, n100.weight, n100.size)).toBeLessThanOrEqual(n100.maxWidth);
 
-    const d5 = collage(set, set.input.members[0], ctx);
-    const n5 = text(d5, "numeral");
-    expect(n5.size).toBe(NUMERAL_START_FRACTION * canvasFor("adult").w);
+    // A narrow digit keeps the full start size — this is the reference sample's own case, a first
+    // birthday, and the numeral there runs nearly the height of the shirt.
+    const s1 = unicornSet("en"); s1.input.age = 1;
+    const n1 = text(collage(s1, s1.input.members[0], ctx), "numeral");
+    // Measured against the block's height, which is the safe area's, not the whole canvas side.
+    expect(n1.size).toBe(NUMERAL_START_FRACTION * safeArea(canvasFor("adult")).h);
+    // And a wider one is only ever smaller, never bigger.
+    expect(n10.size).toBeLessThan(n1.size);
   });
 
-  it("indonesian moves ordinal before the numeral", () => {
-    const s = unicornSet("id");
-    const d = collage(s, s.input.members[0], ctx);
-    expect(text(d, "ordinal").text).toBe("ke-");
-    expect(text(d, "ordinal").y).toBeLessThan(text(d, "numeral").y);
+  /**
+   * "ke-" reads before the number, so in Indonesian it moves out of the slot beside the numeral and
+   * into its own line over the numeral's column. Asserted on the columns rather than on `y`: both
+   * boxes start near the top of the block and it is the horizontal move — from the numeral's right
+   * shoulder to directly above it — that is the actual difference.
+   */
+  it("indonesian moves the ordinal over the numeral instead of beside it", () => {
+    const id = collage(unicornSet("id"), unicornSet("id").input.members[0], ctx);
+    const en = collage(set, set.input.members[0], ctx);
+    expect(text(id, "ordinal").text).toBe("ke-");
+
+    // Indonesian starts it at the numeral's own left edge; English sets it out to the right, past
+    // the middle of the numeral's column, where the sample puts its "st".
+    expect(text(id, "ordinal").x).toBeLessThan(text(id, "numeral").x + 0.1 * text(id, "numeral").maxWidth);
+    expect(text(en, "ordinal").x).toBeGreaterThan(text(en, "numeral").x + 0.5 * text(en, "numeral").maxWidth);
   });
 });
