@@ -10,6 +10,8 @@ export const ShirtAssetSchema = z.object({
   id: z.string().min(1),
   sizeClasses: SizeClassSchema.array().nonempty(),
   image: z.string().min(1),
+  /** Greyscale light and shadow for this shirt, multiplied over the tinted fabric and the print. */
+  shade: z.string().min(1).optional(),
   pxPerCm: z.number().positive(),
   chestAnchor: z.object({ x: z.number(), y: z.number() }),
   width: z.number().int().positive(),
@@ -75,7 +77,20 @@ export async function renderMockup(design: Design, shirt: ShirtAsset, opts: { lo
     .png()
     .toBuffer();
 
-  return sharp(composed)
+  // 4. multiply the shirt's own shading over everything last, so the folds run across the print as
+  //    well as the fabric — a print shaded with the cloth reads as ink in it, not a sticker on it.
+  //    Masked back to the shirt alpha for the same reason the tint was.
+  const shaded = shirt.shade
+    ? await sharp(composed)
+        .composite([
+          { input: await sharp(path.join(MOCKUP_DIR, shirt.shade)).ensureAlpha().png().toBuffer(), blend: "multiply" },
+          { input: base, blend: "dest-in" },
+        ])
+        .png()
+        .toBuffer()
+    : composed;
+
+  return sharp(shaded)
     .flatten({ background: "#f3f3f3" })
     .resize({ width: outW })
     .jpeg({ quality: 88 })

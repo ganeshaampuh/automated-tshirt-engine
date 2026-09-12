@@ -11,7 +11,7 @@ const DesignStage = dynamic(() => import("@/engine/render/browser/DesignStage").
 
 export type View = "shirt" | "print";
 
-type Shirt = { id: string; image: string; pxPerCm: number; chestAnchor: { x: number; y: number }; width: number; height: number };
+type Shirt = { id: string; image: string; shade?: string; pxPerCm: number; chestAnchor: { x: number; y: number }; width: number; height: number };
 
 const cache = new Map<string, Promise<Shirt>>();
 const shirtId = (sizeClass: Design["sizeClass"]) => (sizeClass === "adult" ? "adult-flat" : "kids-flat");
@@ -98,6 +98,12 @@ export function CanvasPanel({
           <div className="absolute" style={{ left: shirt.chestAnchor.x * k - designW / 2, top: shirt.chestAnchor.y * k }}>
             <DesignStage design={design} scale={designW / design.canvas.w} editable selectedId={selected} onSelect={onSelect} onChange={onPatch} />
           </div>
+          {/* The fabric's shading, over the print as well as the cloth — the same last step
+              renderMockup takes, so the editor shows what gets exported. */}
+          {shirt.shade && (
+            // eslint-disable-next-line @next/next/no-img-element -- plain <img> keeps the mockup maths in raw pixels
+            <img src={`/mockups/${shirt.shade}`} alt="" className="pointer-events-none absolute inset-0 size-full mix-blend-multiply" />
+          )}
         </div>
       );
     }

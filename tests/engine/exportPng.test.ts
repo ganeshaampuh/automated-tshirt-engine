@@ -29,4 +29,14 @@ describe("exportPrintPng", () => {
     await expect(exportPrintPng(d, loadImage)).rejects.toBeInstanceOf(ExportError);
     expect(loadImage).not.toHaveBeenCalled();
   });
+  it("refuses a design whose every layer was hidden", async () => {
+    // Reachable once layers can be deleted set-wide: the member you are looking at may have more
+    // layers than another, so hiding down to nothing there empties this one. Without the guard
+    // sharp is handed a zero-width crop and throws something nobody can read.
+    const s = unicornSet();
+    const d = { ...collage(s, s.input.members[0], ctx), layers: [] };
+    const loadImage = vi.fn(loadImageFromFile);
+    await expect(exportPrintPng(d, loadImage)).rejects.toBeInstanceOf(ExportError);
+    expect(loadImage).not.toHaveBeenCalled();
+  });
 });

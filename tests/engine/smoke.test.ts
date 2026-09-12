@@ -11,7 +11,7 @@ describe("engine", () => {
   it("exposes the isomorphic surface", () => {
     for (const name of ["DesignSchema", "SetSchema", "maxCm", "canvasFor", "boundingBoxCm", "isWithinSafeArea",
       "CURATED_FONTS", "DEFAULT_FONT", "fontUrl", "fontWeights", "nearestWeight", "displayText", "fitText", "defaultWording", "ordinalSuffix",
-      "resolveLines", "collage", "expand", "applyOverrides"]) {
+      "resolveLines", "collage", "expand", "applyOverrides", "setFonts"]) {
       expect(engine, name).toHaveProperty(name);
     }
   });

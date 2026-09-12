@@ -28,9 +28,31 @@ export function applyOrder(design: Design, order: Member["order"]): Design {
   return { ...design, layers: order.map(id => byId.get(id)!) };
 }
 
-export function expand(set: Set, ctx: TemplateContext): { memberId: string; design: Design }[] {
-  return set.input.members.map(m => ({
-    memberId: m.id,
-    design: applyOrder(applyOverrides(collage(set, m, ctx), m.overrides), m.order),
-  }));
+/**
+ * Drops the layers this member has hidden.
+ *
+ * Deliberately the last step. `applyOrder` compares a stored order against the layers the template
+ * produced and discards it when the two disagree, so hiding a layer before the reorder would read
+ * as a stale order and throw away the member's arrangement. Running after it means nothing
+ * downstream — renderers, `boundingBox`, the safe-area check, the exporter — ever sees a hidden
+ * layer or needs to know the concept exists.
+ */
+export function dropHidden(design: Design): { design: Design; hidden: string[] } {
+  const hidden = design.layers.filter(l => l.hidden).map(l => l.id);
+  if (!hidden.length) return { design, hidden };
+  return { design: { ...design, layers: design.layers.filter(l => !l.hidden) }, hidden };
+}
+
+/**
+ * One design per member, plus the ids this member hid.
+ *
+ * `hidden` is read off the drawn stack rather than off `overrides`, and the difference matters: an
+ * override can name a layer this member's template never drew — the wording decides which slots
+ * the collage emits — and offering the shop a layer back that was never there is a dead button.
+ */
+export function expand(set: Set, ctx: TemplateContext): { memberId: string; design: Design; hidden: string[] }[] {
+  return set.input.members.map(m => {
+    const { design, hidden } = dropHidden(applyOrder(applyOverrides(collage(set, m, ctx), m.overrides), m.order));
+    return { memberId: m.id, design, hidden };
+  });
 }

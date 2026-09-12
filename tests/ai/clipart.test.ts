@@ -1,23 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import sharp from "sharp";
 import { readFileSync } from "node:fs";
-import { generateClipart, describeClipart, removeWhiteBackground, dominantColors, clearDescribeCacheForTests } from "@/ai/clipart";
+import { generateClipart, describeClipart, dominantColors, clearDescribeCacheForTests } from "@/ai/clipart";
 import type { AIProvider } from "@/ai/provider";
 import * as sets from "@/lib/sets";
 
 const unicorn = readFileSync("tests/fixtures/unicorn.png");
-
-describe("removeWhiteBackground", () => {
-  it("turns a white border transparent and trims", async () => {
-    const src = await sharp({ create: { width: 200, height: 200, channels: 4, background: "#ffffff" } })
-      .composite([{ input: await sharp({ create: { width: 50, height: 80, channels: 4, background: "#ff0000" } }).png().toBuffer(), left: 75, top: 60 }]).png().toBuffer();
-    const out = await removeWhiteBackground(src);
-    const meta = await sharp(out).metadata();
-    expect(meta.width).toBeLessThanOrEqual(52); expect(meta.height).toBeLessThanOrEqual(82);
-    const { data } = await sharp(out).raw().toBuffer({ resolveWithObject: true });
-    expect(data[3]).toBe(255); // top-left after trim is red, opaque
-  });
-});
 
 describe("dominantColors", () => {
   it("finds pinks in the unicorn fixture and ignores white/transparent", async () => {
@@ -42,6 +30,31 @@ describe("generateClipart", () => {
     const out = await generateClipart("unicorn", { provider, putBlob });
     expect(out.url).toBe("https://blob/clipart.png");
     expect(out.width).toBeLessThanOrEqual(102); expect(out.height).toBeLessThanOrEqual(62);
+  });
+
+  it("keeps the white inside the drawing, not only around it", async () => {
+    // CogView draws on a plain white background, and the drawing itself has white in it. The
+    // background must go; the gleam in the eye must not.
+    let uploaded: Buffer | undefined;
+    const provider: AIProvider = {
+      chatJSON: vi.fn(),
+      generateImage: vi.fn(async () =>
+        sharp({ create: { width: 300, height: 300, channels: 4, background: "#ffffff" } })
+          .composite([
+            { input: await sharp({ create: { width: 120, height: 120, channels: 4, background: "#000000" } }).png().toBuffer(), left: 90, top: 90 },
+            { input: await sharp({ create: { width: 24, height: 24, channels: 4, background: "#ffffff" } }).png().toBuffer(), left: 138, top: 138 },
+          ])
+          .png()
+          .toBuffer(),
+      ),
+    };
+    const putBlob = vi.fn(async (_path: string, body: Buffer) => { uploaded = body; return "https://blob/clipart.png"; });
+
+    await generateClipart("unicorn", { provider, putBlob });
+
+    const { data, info } = await sharp(uploaded!).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const middle = ((info.height >> 1) * info.width + (info.width >> 1)) * 4;
+    expect(data[middle + 3]).toBe(255);
   });
 });
 

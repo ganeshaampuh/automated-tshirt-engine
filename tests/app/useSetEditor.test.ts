@@ -222,3 +222,32 @@ describe("safe-area reporting", () => {
     expect(safetyWarning([{ ...members[0], label: " " }], ["ayah"])).toBe("Desain tanpa nama keluar dari area aman");
   });
 });
+
+describe("deleting and restoring a layer", () => {
+  it("records the delete as a member-scoped override", () => {
+    const next = run(initial(), { type: "patchLayer", memberId: "mama", layerId: "top", patch: { hidden: true }, scope: "member" });
+    expect(member(next, "mama").overrides?.top).toEqual({ hidden: true });
+    expect(member(next, "ayah").overrides).toBeUndefined();
+  });
+
+  it("deletes the layer from every shirt when the scope is the set", () => {
+    const next = run(initial(), { type: "patchLayer", memberId: "ayah", layerId: "top", patch: { hidden: true }, scope: "set" });
+    for (const m of next.input.members) expect(m.overrides?.top).toEqual({ hidden: true });
+  });
+
+  it("restores the layer without disturbing the tweaks it already carried", () => {
+    const next = run(
+      initial(),
+      { type: "patchLayer", memberId: "mama", layerId: "bottom", patch: { x: 40 }, scope: "member" },
+      { type: "patchLayer", memberId: "mama", layerId: "bottom", patch: { hidden: true }, scope: "member" },
+      { type: "patchLayer", memberId: "mama", layerId: "bottom", patch: { hidden: false }, scope: "member" },
+    );
+    expect(member(next, "mama").overrides?.bottom).toEqual({ x: 40, hidden: false });
+  });
+
+  it("leaves the shared style alone — a delete is never a palette change", () => {
+    const before = initial();
+    const next = run(before, { type: "patchLayer", memberId: "ayah", layerId: "numeral", patch: { hidden: true }, scope: "set" });
+    expect(next.style).toEqual(before.style);
+  });
+});

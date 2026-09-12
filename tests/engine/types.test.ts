@@ -23,4 +23,17 @@ describe("schemas", () => {
     for (const bad of ["http://evil.test/a.png", "file:///etc/passwd", "/etc/passwd", "../../etc/passwd", "public/../../etc/passwd", "x", "", "data:text/html,<script>"])
       expect(style(bad), bad).toBe(false);
   });
+  it("treats a set name as optional, non-empty and bounded", () => {
+    const base = {
+      kidName: "Keisya", age: 5, theme: "unicorn", shirtColor: "#ffffff", language: "id",
+      members: [{ id: "m1", kind: "birthday-kid", label: "Keisya", sizeClass: "kids-1-9" }],
+    };
+    const parse = (name?: unknown) => SetInputSchema.safeParse(name === undefined ? base : { ...base, name });
+    // Every set saved before naming existed has no `name` at all and must stay valid.
+    expect(parse().success).toBe(true);
+    expect(parse("Pesanan Bu Rina").success).toBe(true);
+    expect(parse("").success).toBe(false);
+    expect(parse("x".repeat(80)).success).toBe(true);
+    expect(parse("x".repeat(81)).success).toBe(false);
+  });
 });

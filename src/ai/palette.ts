@@ -104,3 +104,69 @@ export function ensureContrast(color: string, against: string, min = 3): string 
  * by any string comparison and the same blob to a person across a room.
  */
 export const distinct = (a: string, b: string, min = 1.6) => contrastRatio(a, b) >= min;
+
+/**
+ * `color`, pushed away from `against` until it clears `min` — trying both directions.
+ *
+ * `ensureContrast` reads the direction off the shirt's luminance alone, which is right at the ends
+ * of the range and wrong in the middle of it. A vivid mid-tone is the case: #ff4444 sits at 0.27,
+ * so the rule lightens — but that colour is only 3.4:1 against white and 6.2:1 against black, and
+ * lightening runs out of room at 2.8:1 while darkening clears 3 immediately. A red print on a red
+ * shirt is exactly when legibility matters most.
+ *
+ * The luminance rule's direction is still tried first, so anything it already got right is
+ * unchanged; the other direction is a fallback, and if neither clears `min` the more readable of
+ * the two is kept rather than the one that happened to be tried last.
+ */
+function pushAway(color: string, against: string, min: number): string {
+  const preferred = lum(against) > 0.5 ? 0 : 255;
+  let best = color.toLowerCase();
+  for (const toward of [preferred, 255 - preferred]) {
+    let c = color.toLowerCase();
+    for (let i = 0; i < 20 && contrastRatio(c, against) < min; i++) c = mix(c, 0.1, toward);
+    if (contrastRatio(c, against) >= min) return c;
+    if (contrastRatio(c, against) > contrastRatio(best, against)) best = c;
+  }
+  return best;
+}
+
+/** The three inks a design is drawn in: the numeral's stroke, its fill, and the text outline. */
+export type Palette = { primary: string; secondary: string; outline: string };
+
+/**
+ * How much lighter the numeral's fill is than its stroke.
+ *
+ * The reference sample is one colour used twice — a deep magenta outline around a pale magenta
+ * fill — and deriving the second from the first is what reproduces that whatever colour the clipart
+ * turns out to be. It also guarantees the two can be told apart, which picking two of the clipart's
+ * own colours does not: a black-outlined cartoon offers two near-identical darks.
+ */
+export const NUMERAL_TINT = 0.55;
+
+/**
+ * The contrast the numeral's fill has to keep against the shirt.
+ *
+ * Lower than the 3 a text layer has to clear, and deliberately: the numeral is a huge shape with a
+ * `primary` stroke around it, so it is legible at a contrast that would be unreadable for a line of
+ * type. Holding it to 3 would push every pale fill towards the shirt's opposite and undo the pairing
+ * with `primary` that NUMERAL_TINT exists to create.
+ */
+export const FILL_MIN_CONTRAST = 1.6;
+
+/**
+ * The whole palette a clipart implies, on a given shirt.
+ *
+ * One colour decides everything: the accent becomes the stroke, a tint of it becomes the fill, and
+ * the text outline is the stroke again. That is what makes a shirt read as designed rather than as
+ * two unrelated swatches — and why this is the only place the relationship is written down. The
+ * no-model path (`fallbackStyle`) and the read-colours-on-upload path both come here, so a shop
+ * that uploads its own artwork gets the palette the app would have chosen for it.
+ *
+ * Both inks are held against the shirt, at their own thresholds: a red clipart on a red shirt
+ * cannot use its accent as found, and a pale fill on white has to be pushed until it is visible.
+ */
+export function derivePalette(dominant: string[], shirtColor: string): Palette {
+  const primary = pushAway(accentColor(dominant), shirtColor, 3);
+  const secondary = pushAway(tint(primary, NUMERAL_TINT), shirtColor, FILL_MIN_CONTRAST);
+  return { primary, secondary, outline: primary };
+}

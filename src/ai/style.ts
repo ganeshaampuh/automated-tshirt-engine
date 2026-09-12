@@ -3,31 +3,11 @@ import { CURATED_FONTS, DEFAULT_FONT, defaultWording, WordingSchema, type SetInp
 import type { AIProvider } from "./provider";
 import type { ClipartMeta } from "./clipart";
 import { styleSystem, styleUser } from "./prompts";
-import { accentColor, contrastRatio, distinct, ensureContrast, tint } from "./palette";
+import { accentColor, contrastRatio, derivePalette, distinct, ensureContrast, tint, FILL_MIN_CONTRAST, NUMERAL_TINT } from "./palette";
 
 // Re-exported: these moved to `./palette` when the accent picking joined them, and every caller
 // already reaches for them here.
 export { contrastRatio, ensureContrast };
-
-/**
- * How much lighter the numeral's fill is than its stroke.
- *
- * The reference sample is one colour used twice — a deep magenta outline around a pale magenta
- * fill — and deriving the second from the first is what reproduces that whatever colour the clipart
- * turns out to be. It also guarantees the two can be told apart, which picking two of the clipart's
- * own colours does not: a black-outlined cartoon offers two near-identical darks.
- */
-const NUMERAL_TINT = 0.55;
-
-/**
- * The contrast the numeral's fill has to keep against the shirt.
- *
- * Lower than the 3 a text layer has to clear, and deliberately: the numeral is a huge shape with a
- * `primary` stroke around it, so it is legible at a contrast that would be unreadable for a line of
- * type. Holding it to 3 would push every pale fill towards the shirt's opposite and undo the pairing
- * with `primary` that NUMERAL_TINT exists to create.
- */
-const FILL_MIN_CONTRAST = 1.6;
 
 /**
  * The numeral's fill, given the stroke it sits inside and the shirt it is printed on.
@@ -54,15 +34,13 @@ const StyleChoice = z.object({
 
 /**
  * The style a set gets with no model in the loop: the key is missing, or the call failed twice.
- *
- * Everything is derived from one colour — the clipart's accent — so the result is a coherent shirt
- * rather than the two unrelated swatches that taking the top two of `dominantColors` produced. See
- * `accentColor` for why the commonest colour in a drawing is the wrong one to build on.
  */
 export function fallbackStyle(input: SetInput, clipart: { url: string; meta: ClipartMeta }): SetStyle {
-  const primary = ensureContrast(accentColor(clipart.meta.dominantColors), input.shirtColor);
-  const secondary = numeralFill(undefined, primary, input.shirtColor);
-  return { template: "collage", font: DEFAULT_FONT, palette: { primary, secondary, outline: primary }, clipartSrc: clipart.url, wording: defaultWording(input) };
+  return {
+    template: "collage", font: DEFAULT_FONT,
+    palette: derivePalette(clipart.meta.dominantColors, input.shirtColor),
+    clipartSrc: clipart.url, wording: defaultWording(input),
+  };
 }
 
 export async function chooseStyle(input: SetInput, clipart: { url: string; meta: ClipartMeta }, deps: { provider: AIProvider }, note?: string) {

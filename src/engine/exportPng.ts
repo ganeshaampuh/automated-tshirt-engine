@@ -6,6 +6,9 @@ import { renderDesign, type RenderOpts } from "./render/server";
 export class ExportError extends Error {}
 
 export async function exportPrintPng(design: Design, loadImage: RenderOpts["loadImage"]) {
+  // Before the safe-area check, which an empty design passes vacuously — and a 0×0 bounding box
+  // reaches sharp as a zero-width crop, where the error names `extract_area` and not the cause.
+  if (design.layers.length === 0) throw new ExportError("design has no layers to print");
   if (!isWithinSafeArea(design)) throw new ExportError("layer outside safe area");
   const full = await renderDesign(design, { scale: 1, background: null, loadImage });
   const b = boundingBox(design);

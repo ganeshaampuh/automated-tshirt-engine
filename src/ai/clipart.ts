@@ -3,23 +3,11 @@ import { z } from "zod";
 import type { AIProvider } from "./provider";
 import { fetchBytes, type ByteCache } from "@/lib/sets";
 import { MAX_INPUT_PIXELS } from "@/lib/upload";
+import { removeBackground } from "@/lib/removeBackground";
 import { clipartPrompt, describeSystem } from "./prompts";
 
 export type ClipartMeta = { width: number; height: number; dominantColors: string[]; caption: string; kind: "photo" | "illustration" | "logo" | "pattern" };
 const DescribeSchema = z.object({ caption: z.string(), kind: z.enum(["photo", "illustration", "logo", "pattern"]) });
-
-/** Near-white (all channels ≥ 240) becomes transparent; then trim transparent borders. */
-export async function removeWhiteBackground(png: Buffer): Promise<Buffer> {
-  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  for (let i = 0; i < data.length; i += 4) if (data[i] >= 240 && data[i + 1] >= 240 && data[i + 2] >= 240) data[i + 3] = 0;
-  const untrimmed = sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png();
-  try {
-    return await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).trim().png().toBuffer();
-  } catch {
-    // sharp's .trim() throws on a fully transparent image; fall back to the untrimmed PNG.
-    return untrimmed.toBuffer();
-  }
-}
 
 export async function dominantColors(png: Buffer, n = 5): Promise<string[]> {
   const { data } = await sharp(png, { limitInputPixels: MAX_INPUT_PIXELS }).ensureAlpha().resize(64, 64, { fit: "inside" }).raw().toBuffer({ resolveWithObject: true });
@@ -36,7 +24,7 @@ export async function dominantColors(png: Buffer, n = 5): Promise<string[]> {
 
 export async function generateClipart(theme: string, deps: { provider: AIProvider; putBlob: (path: string, body: Buffer, contentType: string) => Promise<string> }) {
   const raw = await deps.provider.generateImage({ prompt: clipartPrompt(theme) });
-  const png = await removeWhiteBackground(raw);
+  const png = await removeBackground(raw);
   const { width = 0, height = 0 } = await sharp(png).metadata();
   const url = await deps.putBlob(`clipart/${Date.now()}-${theme.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`, png, "image/png");
   return { url, width, height };

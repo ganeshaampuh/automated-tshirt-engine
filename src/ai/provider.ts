@@ -62,3 +62,28 @@ export function getProvider(): AIProvider {
   return (cached = new ZaiProvider({ apiKey }));
 }
 export function setProviderForTests(p: AIProvider | undefined) { cached = p; }
+
+/**
+ * The provider, or a stand-in that is down.
+ *
+ * `getProvider` throws when there is no key, which is right for a caller that can do nothing
+ * without a model and wrong for the ones that can. `chooseStyle` already answers a failed call with
+ * a printable fallback style, and a batch already records a per-set error and carries on; both of
+ * those are reached through a rejected promise, not through an exception at construction. So a
+ * missing key is turned into the failure mode the callers are already written to survive, and a
+ * deployment without `ZAI_API_KEY` degrades to the no-AI path instead of erroring at the door.
+ *
+ * The reason travels with it: every call rejects with the same error `getProvider` would have
+ * thrown, so what the shop sees still names the missing key.
+ */
+export function providerOrDown(): AIProvider {
+  try {
+    return getProvider();
+  } catch (e) {
+    const reason = e instanceof Error ? e : new AIError(String(e));
+    return {
+      chatJSON: () => Promise.reject(reason),
+      generateImage: () => Promise.reject(reason),
+    };
+  }
+}

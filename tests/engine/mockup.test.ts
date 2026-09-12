@@ -91,7 +91,7 @@ describe("mockup", () => {
     for (let x = 0; x < info.width; x++) if (data[(row * info.width + x) * info.channels] < 128) dark++;
 
     const expected = Math.round(designPx * k);
-    expect(expected).toBe(174);                                // 29 cm x 24 px/cm scaled to a 600 px frame
+    expect(expected).toBe(187);                                // 29 cm x 25.85 px/cm scaled to a 600 px frame
     expect(Math.abs(dark - expected)).toBeLessThanOrEqual(2);
   }, 30_000);
 
@@ -112,6 +112,32 @@ describe("mockup", () => {
     const d = collage(s, m, ctx);
     const shirt = await loadShirtAsset(defaultShirtFor(m.sizeClass));
     expectGolden(`mockup-${m.id}-dark`, await sharp(await renderMockup(d, shirt, { loadImage: loadImageFromFile, width: 600 })).png().toBuffer());
+  }, 30_000);
+
+  it("shades the print with the fabric, not just the shirt", async () => {
+    // The shade layer is darkest at the sides and neutral over the middle of the chest, so a design
+    // that fills the print area comes out darker at its edges than at its centre.
+    const swatch = await sharp({ create: { width: 8, height: 8, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } } }).png().toBuffer();
+    const canvas = canvasFor("adult");
+    const design: Design = {
+      version: 2, sizeClass: "adult", canvas, shirtColor: "#ffffff",
+      layers: [{ id: "block", type: "image", src: `data:image/png;base64,${swatch.toString("base64")}`, x: 0, y: 0, w: canvas.w, h: canvas.h }],
+    };
+    const shirt = await loadShirtAsset("adult-flat");
+    expect(shirt.shade).toBe("adult-flat-shade.png");
+
+    const outW = 600;
+    const jpg = await renderMockup(design, shirt, { loadImage: loadImageFromFile, width: outW });
+    const { data, info } = await sharp(jpg).raw().toBuffer({ resolveWithObject: true });
+
+    const k = outW / shirt.width;
+    const designPx = maxCm("adult") * shirt.pxPerCm;
+    const row = Math.round((shirt.chestAnchor.y + designPx / 2) * k);
+    const at = (x: number) => data[(row * info.width + Math.round(x)) * info.channels];
+    const mid = at(shirt.chestAnchor.x * k);
+    const edge = at((shirt.chestAnchor.x - designPx / 2) * k + 3);
+    expect(mid).toBeGreaterThan(edge);          // a flat white print would leave these equal
+    expect(mid).toBeGreaterThan(200);           // ...while the middle stays close to white
   }, 30_000);
 
   it("names the asset when the sidecar is missing", async () => {
