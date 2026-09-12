@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CURATED_FONTS, DEFAULT_FONT, defaultWording, WordingSchema, type SetInput, type SetStyle } from "@/engine";
+import { CURATED_FONTS, DEFAULT_FONT, defaultWording, type SetInput, type SetStyle } from "@/engine";
 import type { AIProvider } from "./provider";
 import type { ClipartMeta } from "./clipart";
 import { styleSystem, styleUser } from "./prompts";
@@ -28,7 +28,6 @@ const Hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const StyleChoice = z.object({
   font: z.enum(CURATED_FONTS as [string, ...string[]]),
   palette: z.object({ primary: Hex, secondary: Hex, outline: Hex }),
-  wording: WordingSchema.partial().optional(),
   rationale: z.string().default(""),
 });
 
@@ -53,7 +52,10 @@ export async function chooseStyle(input: SetInput, clipart: { url: string; meta:
       const primary = ensureContrast(c.palette.primary, input.shirtColor);
       const style: SetStyle = { template: "collage", font: c.font,
         palette: { primary, secondary: numeralFill(c.palette.secondary, primary, input.shirtColor), outline: ensureContrast(c.palette.outline, input.shirtColor) },
-        clipartSrc: clipart.url, wording: { ...base, ...(c.wording ?? {}) } };
+        // The wording is the template's, never the model's: `collage` places these four slots at
+        // fixed fractions of the block, so a phrase where it expects a word shrinks to `minSize`
+        // and then runs into its neighbour. The model styles the set; it does not write it.
+        clipartSrc: clipart.url, wording: base };
       return { style, aiFallback: false, rationale: c.rationale };
     } catch (e) {
       user += `\n\nThe previous attempt failed: ${(e as Error).message}. Return only valid JSON matching the schema.`;
