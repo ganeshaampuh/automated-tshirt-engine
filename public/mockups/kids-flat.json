@@ -1,12 +1,16 @@
 {
   "id": "kids-flat",
-  "sizeClasses": ["kids-0-1", "kids-1-9"],
+  "sizeClasses": [
+    "kids-0-1",
+    "kids-1-9"
+  ],
   "image": "kids-flat.png",
+  "shade": "kids-flat-shade.png",
   "pxPerCm": 37.333333,
   "width": 2400,
   "height": 2600,
   "chestAnchor": {
     "x": 1200,
-    "y": 728
+    "y": 731
   }
 }
