@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { styleWithPalette } from "@/lib/clipartPalette";
-import { paletteFromClipart } from "@/ai/style";
+import { derivePalette } from "@/ai/palette";
 import { DEFAULT_FONT, defaultWording, type SetInput, type SetStyle } from "@/engine";
 
 const input = (shirtColor = "#ffffff"): SetInput => ({
@@ -33,7 +33,7 @@ describe("styleWithPalette", () => {
     expect(next).toEqual({
       template: "collage",
       font: DEFAULT_FONT,
-      palette: paletteFromClipart(["#ff0000", "#00ff00"], i.shirtColor),
+      palette: derivePalette(["#ff0000", "#00ff00"], i.shirtColor),
       clipartSrc: "/new-clipart.png",
       wording: defaultWording(i),
     });
@@ -42,8 +42,8 @@ describe("styleWithPalette", () => {
   it("derives the palette through the one shared rule, so upload and AI-fallback cannot drift", () => {
     const i = input();
     const colors = ["#ff0000", "#00ff00"];
-    expect(styleWithPalette(null, i, "/c.png", colors).palette).toEqual(paletteFromClipart(colors, i.shirtColor));
-    expect(styleWithPalette(tuned, i, "/c.png", colors).palette).toEqual(paletteFromClipart(colors, i.shirtColor));
+    expect(styleWithPalette(null, i, "/c.png", colors).palette).toEqual(derivePalette(colors, i.shirtColor));
+    expect(styleWithPalette(tuned, i, "/c.png", colors).palette).toEqual(derivePalette(colors, i.shirtColor));
   });
 
   it("pushes a primary that would be unreadable away from the shirt", () => {
