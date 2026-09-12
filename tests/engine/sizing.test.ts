@@ -31,8 +31,25 @@ describe("bounding box", () => {
       { id: "a", type: "image", src: "x", x: 100, y: 200, w: 500, h: 400 },
       { id: "b", type: "text", text: "Hi", font: "Fredoka", weight: 700, size: 100, color: "#000", align: "center", x: 50, y: 900, maxWidth: 800, lines: 1 },
     ]);
-    // The text layer's box bottom includes the descender allowance: 900 + 100 * 1.25 = 1025.
-    expect(boundingBox(d)).toEqual({ x: 50, y: 200, w: 800, h: 825 });
+    // "Hi" cannot put ink below its box, so it claims no descender allowance: 900 + 100 = 1000.
+    expect(boundingBox(d)).toEqual({ x: 50, y: 200, w: 800, h: 800 });
+  });
+
+  it("gives the descender allowance to text that actually descends", () => {
+    const withTail = design(3425, [
+      { id: "b", type: "text", text: "Happy", font: "Fredoka", weight: 700, size: 100, color: "#000", align: "center", x: 50, y: 900, maxWidth: 800, lines: 1 },
+    ]);
+    // The "y" descends, so the box bottom is 900 + 100 * 1.25 = 1025.
+    expect(boundingBox(withTail).h).toBe(125);
+  });
+
+  // What reaches the canvas is the transformed string, so a mixed-case line drawn in caps has no
+  // descenders left in it by the time it is drawn.
+  it("judges an uppercased layer on what will be drawn, not on what is stored", () => {
+    const shouted = design(3425, [
+      { id: "b", type: "text", text: "Happy", transform: "upper", font: "Fredoka", weight: 700, size: 100, color: "#000", align: "center", x: 50, y: 900, maxWidth: 800, lines: 1 },
+    ]);
+    expect(boundingBox(shouted).h).toBe(100);
   });
   it("reports cm using 300 dpi", () => {
     const d = design(3425, [{ id: "a", type: "image", src: "x", x: 0, y: 0, w: 3425, h: 1000 }]);

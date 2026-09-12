@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { waitUntil } from "@vercel/functions";
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { strandedSets } from "@/db/claimSets";
-import { approvable, batchDeletable, deletable, isUnderway } from "@/app/batch/[id]/galleryRules";
+import { approvable, deletable, isUnderway } from "@/app/batch/[id]/galleryRules";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { deleteBlob, deleteBlobs, putBlob } from "@/lib/blob";
 import { rowsToInserts } from "@/lib/batchInserts";
@@ -393,11 +393,11 @@ export async function exportBatchAction(id: string): Promise<ActionResult<{ star
  * Deletes the sets the shop asked for — one card's button or the whole ticked selection, which is
  * the same call with a longer array.
  *
- * `deletable` decides which ids actually go: everything settled, whatever verdict it carries, but
- * never a set a tick may still be holding. The `notInArray` in the DELETE repeats that guard in
- * SQL, because between the read and the write a resume or a regeneration may have put the row back
- * in the queue, and only the database can settle that race. Ids that lose it are dropped silently
- * and the answer says how many rows really went.
+ * `deletable` decides which ids actually go, and since a delete is also how a shop cancels work it
+ * no longer wants, that is every id it can see — a `queued` or `processing` set included. The tick
+ * holding such a row finds it gone, throws its work away and cleans up its own uploads; see
+ * `src/app/api/batch/[id]/tick/route.ts`. Ids naming a row that is already gone are dropped
+ * silently and the answer says how many rows really went.
  *
  * Also serves the home page's set list, where a set has no batch at all: `refreshCounts` is skipped
  * for those, and everything else applies unchanged.
@@ -419,7 +419,7 @@ export async function deleteSetsAction(ids: string[]): Promise<ActionResult<{ de
     // removed, so a row the guard refused never has its export deleted out from under it.
     const gone = await db
       .delete(sets)
-      .where(and(inArray(sets.id, going), notInArray(sets.status, ["queued", "processing"])))
+      .where(inArray(sets.id, going))
       .returning({ id: sets.id, exportUrl: sets.exportUrl })
       .catch(e => fail("Gagal menghapus set.", e));
     if (gone.length === 0) return { deleted: 0 };
@@ -442,8 +442,11 @@ export async function deleteSetsAction(ids: string[]): Promise<ActionResult<{ de
 /**
  * Deletes a whole batch: its sets, its row, and every file the two of them own.
  *
- * `batchDeletable` refuses the two states with a live function behind them, so by the time anything
- * is removed there is no tick claiming these sets and no export streaming a ZIP out of them.
+ * Nothing is refused. A batch mid-render or mid-export goes too, because that is how a shop stops
+ * work it no longer wants: no function can be killed from outside, so the delete lands first and
+ * the tick or the export route notices on its own that the rows it was working for are gone — see
+ * the cancel checks in `src/app/api/batch/[id]/tick/route.ts` and `.../export/route.ts`, which
+ * throw the work away and take their own uploads back out of Blob storage.
  *
  * The batch row goes first, guarded on the status that was read — the reverse of what the sets-then-
  * batch order would suggest, and deliberately so. That guarded DELETE is the lock: it is what makes
@@ -453,21 +456,13 @@ export async function deleteSetsAction(ids: string[]): Promise<ActionResult<{ de
  * with a `batchId` pointing at nothing — they stay visible and individually deletable on the home
  * page, which is a far smaller problem than a half-deleted batch that a tick can resurrect.
  *
- * Sets are removed by `batchId` without consulting `deletable`, which the guard above has already
- * earned: the only rows that can still be `processing` here are ones a dead tick stranded, and
- * nothing is left running that could write to them.
+ * Sets are removed by `batchId` without consulting `deletable`: the batch is going, so every row
+ * that points at it goes with it whatever status it carries.
  */
 export async function deleteBatchAction(id: string): Promise<ActionResult<{ deleted: number }>> {
   return action(async () => {
     const batch = await db.query.batches.findFirst({ where: eq(batches.id, id) }).catch(e => fail("Gagal membaca batch.", e));
     if (!batch) fail("Batch ini tidak ada.");
-    if (!batchDeletable(batch.status)) {
-      fail(
-        batch.status === "processing"
-          ? "Batch masih diproses. Tunggu sampai selesai sebelum menghapusnya."
-          : "Batch sedang diekspor. Tunggu ZIP-nya selesai sebelum menghapusnya.",
-      );
-    }
 
     const claimed = await db
       .delete(batches)

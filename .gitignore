@@ -55,3 +55,4 @@ tests/engine/__golden__/*.diff.png
 .agents/
 .claude/
 skills-lock.json
+docs/samples/.DS_Store

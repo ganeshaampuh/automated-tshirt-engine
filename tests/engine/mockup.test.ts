@@ -8,6 +8,7 @@ import { loadImageFromFile } from "@/engine/render/server";
 import { collage } from "@/engine/templates/collage";
 import { createNodeMeasurer } from "@/engine/measure";
 import { canvasFor, maxCm } from "@/engine/sizing";
+import type { TextLayer } from "@/engine/types";
 import type { Design } from "@/engine/types";
 import { unicornSet, CLIPART_SIZE } from "../fixtures/set-unicorn";
 import { expectGolden } from "./golden";
@@ -41,14 +42,28 @@ describe("mockup", () => {
     // sample a pixel in the lower body of the shirt, below the design
     const x = 200, y = 360, i = (y * 400 + x) * 3;
     expect(data[i]).toBeLessThan(40);
-    // ...while the print itself stays opaque on top of the black shirt: sample the numeral fill
-    // (secondary pink) near the left of the design and require it to be far from black.
+    // ...while the print itself stays opaque on top of the black shirt. Sampled over the numeral's
+    // own box rather than at a fixed fraction of the design: the numeral is the one layer whose
+    // place the template is free to move, and a magic pixel silently starts probing the margin the
+    // moment it does. What is asserted is unchanged — the pale numeral fill is really drawn on top
+    // of the black shirt — but it now survives the layout being retuned.
     const k = 400 / shirt.width;
     const designW = maxCm("adult") * shirt.pxPerCm;
-    const nx = Math.round((shirt.chestAnchor.x - designW / 2 + designW * 0.12) * k);
-    const ny = Math.round((shirt.chestAnchor.y + designW * 0.45) * k);
-    const n = (ny * 400 + nx) * 3;
-    expect(data[n] + data[n + 1] + data[n + 2]).toBeGreaterThan(200);
+    const numeral = d.layers.find(l => l.id === "numeral") as TextLayer;
+    const toMockup = (dx: number, dy: number) => ({
+      x: Math.round((shirt.chestAnchor.x - designW / 2 + (dx / d.canvas.w) * designW) * k),
+      y: Math.round((shirt.chestAnchor.y + (dy / d.canvas.w) * designW) * k),
+    });
+    let brightest = 0;
+    for (let dy = numeral.y; dy < numeral.y + numeral.size; dy += numeral.size / 40) {
+      for (let dx = numeral.x; dx < numeral.x + numeral.maxWidth; dx += numeral.maxWidth / 40) {
+        const p = toMockup(dx, dy);
+        if (p.x < 0 || p.x >= 400 || p.y < 0 || p.y >= 400) continue;
+        const i2 = (p.y * 400 + p.x) * 3;
+        brightest = Math.max(brightest, data[i2] + data[i2 + 1] + data[i2 + 2]);
+      }
+    }
+    expect(brightest).toBeGreaterThan(200);
     // ...and the ground outside the silhouette must stay the flatten background, not the shirt colour
     const o = (5 * 400 + 5) * 3;
     expect(data[o]).toBeGreaterThan(230);

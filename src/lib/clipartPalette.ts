@@ -1,5 +1,5 @@
 import { DEFAULT_FONT, defaultWording, type SetInput, type SetStyle } from "@/engine";
-import { paletteFromColors } from "@/ai/style";
+import { paletteFromClipart } from "@/ai/style";
 
 /**
  * The style a set should have once a freshly uploaded clipart has been read for its colors.
@@ -16,7 +16,7 @@ export function styleWithPalette(
   clipartUrl: string,
   colors: string[],
 ): SetStyle {
-  const palette = paletteFromColors(colors, input.shirtColor);
+  const palette = paletteFromClipart(colors, input.shirtColor);
   if (existing) return { ...existing, palette, clipartSrc: clipartUrl };
   return { template: "collage", font: DEFAULT_FONT, palette, clipartSrc: clipartUrl, wording: defaultWording(input) };
 }
