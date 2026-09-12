@@ -15,8 +15,10 @@ const OUT_DIR = path.join(__dirname, "..", "public", "mockups");
  *                   the tinted shirt *and* the print, which is what stops the print reading as a
  *                   sticker laid on a flat slab.
  *
- * The body is exactly 0.56·W wide at the armpits: `pxPerCm` is derived from that number, so the
- * proportion is load-bearing and the rest of the silhouette hangs off it.
+ * The body is exactly 0.56·W wide at the armpits: `pxPerCm` is derived from that number against the
+ * garment's real width in centimetres, so the proportion is load-bearing and the rest of the
+ * silhouette hangs off it. Widen `bodyCm` and every print rendered on this shirt appears smaller,
+ * because the same centimetres now buy fewer pixels.
  */
 const BODY_FRACTION = 0.56;
 
@@ -163,7 +165,13 @@ function shadeSvg(W: number, H: number) {
   </svg>`;
 }
 
-async function make(id: string, sizeClasses: SizeClass[], W: number, H: number, pxPerCm: number) {
+/**
+ * @param bodyCm        width of the real garment across the armpits
+ * @param printDropCm   how far below the collar seam the top of the print sits — the anchor is
+ *                      derived from it rather than typed in, so it survives a change to the neckline
+ */
+async function make(id: string, sizeClasses: SizeClass[], W: number, H: number, bodyCm: number, printDropCm: number) {
+  const pxPerCm = (W * BODY_FRACTION) / bodyCm;
   mkdirSync(OUT_DIR, { recursive: true });
 
   const garment = await sharp(Buffer.from(garmentSvg(W, H))).png().toBuffer();
@@ -181,12 +189,13 @@ async function make(id: string, sizeClasses: SizeClass[], W: number, H: number, 
   writeFileSync(path.join(OUT_DIR, `${id}.json`), JSON.stringify({
     id, sizeClasses, image: `${id}.png`, shade: `${id}-shade.png`,
     pxPerCm: Number(pxPerCm.toFixed(6)), width: W, height: H,
-    chestAnchor: { x: W / 2, y: Math.round(g.neckBottomY + H * 0.018) },
+    chestAnchor: { x: W / 2, y: Math.round(g.neckBottomY + printDropCm * pxPerCm) },
   }, null, 2) + "\n");
 }
 
-// adult shirt ~ 56 cm across the body → body px / 56 cm ; kids ~ 36 cm
-make("adult-flat", ["adult"], 2400, 2600, (2400 * BODY_FRACTION) / 56)
-  .then(() => make("kids-flat", ["kids-0-1", "kids-1-9"], 2400, 2600, (2400 * BODY_FRACTION) / 36))
+// An adult tee measures about 52 cm across the body and a kids one about 36 cm. The print starts a
+// hand's width below the collar on an adult, proportionally less on a child.
+make("adult-flat", ["adult"], 2400, 2600, 52, 7)
+  .then(() => make("kids-flat", ["kids-0-1", "kids-1-9"], 2400, 2600, 36, 5))
   .then(() => console.log("ok"))
   .catch((err) => { console.error(err); process.exitCode = 1; });

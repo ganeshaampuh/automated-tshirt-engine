@@ -5,11 +5,11 @@
   ],
   "image": "adult-flat.png",
   "shade": "adult-flat-shade.png",
-  "pxPerCm": 24,
+  "pxPerCm": 25.846154,
   "width": 2400,
   "height": 2600,
   "chestAnchor": {
     "x": 1200,
-    "y": 731
+    "y": 865
   }
 }

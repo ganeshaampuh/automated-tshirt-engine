@@ -76,7 +76,7 @@ describe("mockup", () => {
     for (let x = 0; x < info.width; x++) if (data[(row * info.width + x) * info.channels] < 128) dark++;
 
     const expected = Math.round(designPx * k);
-    expect(expected).toBe(174);                                // 29 cm x 24 px/cm scaled to a 600 px frame
+    expect(expected).toBe(187);                                // 29 cm x 25.85 px/cm scaled to a 600 px frame
     expect(Math.abs(dark - expected)).toBeLessThanOrEqual(2);
   }, 30_000);
 
