@@ -26,6 +26,15 @@ export type LayerPatch = Partial<Omit<TextLayer, "id" | "type">> & Partial<Omit<
 /** "set" spreads an edit across every member (and into the shared style); "member" keeps it local. */
 export type Scope = "set" | "member";
 
+/**
+ * Where an edit lands for a shop that never touches the scope toggle.
+ *
+ * The open shirt, not the set: a nudge meant for one member that quietly moved four is work to
+ * undo across four tabs, while a set-wide change the shop has to ask for costs one click on the
+ * toggle. Default to the mistake that is cheap to recover from.
+ */
+export const DEFAULT_SCOPE: Scope = "member";
+
 /** Where a reorder sends the layer, in the renderer's own direction: the last id is drawn on top. */
 export type Move = "front" | "forward" | "backward" | "back";
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reducer, safetyWarning, starterStyle, unsafeMemberIds, type Action, type EditorState } from "@/app/set/[id]/useSetEditor";
+import { DEFAULT_SCOPE, reducer, safetyWarning, starterStyle, unsafeMemberIds, type Action, type EditorState } from "@/app/set/[id]/useSetEditor";
 import { canvasFor, type Design } from "@/engine";
 import { unicornSet } from "../fixtures/set-unicorn";
 
@@ -10,6 +10,16 @@ function initial(): EditorState {
 
 const run = (state: EditorState, ...actions: Action[]) => actions.reduce(reducer, state);
 const member = (s: EditorState, id: string) => s.input.members.find(m => m.id === id)!;
+
+/**
+ * The scope toggle's opening position, which decides where an edit lands for a shop that never
+ * touches it. It starts on the one shirt: a nudge meant for one member that quietly moved four is
+ * work to undo, while a set-wide change the shop has to ask for by sliding the toggle is one click.
+ * The cheap mistake is the one worth defaulting to.
+ */
+describe("DEFAULT_SCOPE", () => {
+  it("edits the open shirt, not the whole set", () => expect(DEFAULT_SCOPE).toBe("member"));
+});
 
 describe("useSetEditor reducer", () => {
   it("spreads a geometry patch over every member when the scope is the set", () => {
