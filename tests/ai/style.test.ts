@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { chooseStyle, fallbackStyle, contrastRatio, ensureContrast } from "@/ai/style";
 import { distinct, HOUSE_ACCENT, tint, toHsl } from "@/ai/palette";
+import { defaultWording } from "@/engine";
 import { unicornSet } from "../fixtures/set-unicorn";
 import type { AIProvider } from "@/ai/provider";
 import { AIError } from "@/ai/provider";
@@ -23,6 +24,20 @@ describe("chooseStyle", () => {
     const r = await chooseStyle(input, clipart, { provider });
     expect(r.aiFallback).toBe(false); expect(r.style.font).toBe("Bangers"); expect(r.style.template).toBe("collage");
     expect(r.style.clipartSrc).toBe(clipart.url); expect(r.style.wording.occasion).toBe("Birthday");
+  });
+  /**
+   * The four wording slots sit at fixed fractions of the block in `collage`, so their length is
+   * part of the layout, not decoration. A model that answers with a phrase where the template
+   * wants a word shrinks the slot to `minSize` and then overruns its neighbour. The words are the
+   * template's to decide; the model picks the font and the palette.
+   */
+  it("keeps the template's wording when the model sends its own", async () => {
+    const provider: AIProvider = { generateImage: vi.fn(), chatJSON: vi.fn(async () => ({
+      ...good, wording: { kidTop: "Happy Birthday To My Sweet", occasion: "Birthday Celebration Party", ordinal: "-th-" },
+    })) as unknown as AIProvider["chatJSON"] };
+    const r = await chooseStyle(input, clipart, { provider });
+    expect(r.aiFallback).toBe(false);
+    expect(r.style.wording).toEqual(defaultWording(input));
   });
   it("retries once with the error, then falls back", async () => {
     const chat = vi.fn().mockRejectedValueOnce(new AIError("bad", "{}")).mockRejectedValueOnce(new AIError("bad again"));

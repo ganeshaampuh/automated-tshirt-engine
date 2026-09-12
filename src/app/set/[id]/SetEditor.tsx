@@ -11,7 +11,7 @@ import { HiddenLayers } from "./components/HiddenLayers";
 import { MemberTabs } from "./components/MemberTabs";
 import { SizeReadout } from "./components/SizeReadout";
 import { Button, ToastHost, useAction, useToast } from "@/app/components/ui";
-import { useSetEditor, type Initial, type LayerPatch, type Move, type Scope } from "./useSetEditor";
+import { DEFAULT_SCOPE, useSetEditor, type Initial, type LayerPatch, type Move, type Scope } from "./useSetEditor";
 
 export default function SetEditor({ initial }: { initial: Initial }) {
   return (
@@ -38,7 +38,7 @@ function Editor({ initial }: { initial: Initial }) {
   useUndoRedoKeys(undo, redo);
 
   const [view, setView] = useState<View>("shirt");
-  const [scope, setScope] = useState<Scope>("set");
+  const [scope, setScope] = useState<Scope>(DEFAULT_SCOPE);
   const [zipUrl, setZipUrl] = useState<string | null>(null);
   const { pending, run } = useAction();
 

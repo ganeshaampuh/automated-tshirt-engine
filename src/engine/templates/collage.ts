@@ -67,8 +67,7 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
 
   const numeralText = String(set.input.age);
   const numeralMaxWidth = 0.42 * W;
-  // Indonesian gives up a little height to leave the "ke-" a line of its own above the numeral.
-  const numeralStart = (NUMERAL_START_FRACTION - (lines.ordinalBeforeNumeral ? 0.06 : 0)) * H;
+  const numeralStart = NUMERAL_START_FRACTION * H;
   const { size: numeralSize } = fitText(ctx.measure, {
     text: numeralText, font, weight: 900, maxWidth: numeralMaxWidth, startSize: numeralStart, minSize,
   });
@@ -100,11 +99,9 @@ export function collage(set: Set, member: Member, ctx: TemplateContext): Design 
   // The name runs the width of the block, one band across the very top.
   const top = fitted("top", lines.top, 0.05, 0, 0.90, 0.18, "center");
 
-  const ordinal = lines.ordinalBeforeNumeral
-    ? fitted("ordinal", lines.ordinal, 0, 0.17, 0.30, 0.077, "left")
-    // Clear of the numeral's column (which ends at 0.42) so a wide digit's shoulder cannot touch
-    // it, and still left of "BIRTHDAY", which is where the sample tucks its "st".
-    : fitted("ordinal", lines.ordinal, 0.45, 0.215, 0.13, 0.077, "left");
+  // Clear of the numeral's column (which ends at 0.42) so a wide digit's shoulder cannot touch
+  // it, and still left of "BIRTHDAY", which is where the sample tucks its "st".
+  const ordinal = fitted("ordinal", lines.ordinal, 0.45, 0.215, 0.13, 0.077, "left");
 
   // "BIRTHDAY" sits up and to the right of the ordinal, tucked against the numeral's shoulder.
   const occasion = fitted("occasion", lines.occasion, 0.525, 0.16, 0.465, 0.10, "left");

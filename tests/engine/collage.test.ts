@@ -154,20 +154,4 @@ describe("collage template", () => {
     expect(n10.size).toBeLessThan(n1.size);
   });
 
-  /**
-   * "ke-" reads before the number, so in Indonesian it moves out of the slot beside the numeral and
-   * into its own line over the numeral's column. Asserted on the columns rather than on `y`: both
-   * boxes start near the top of the block and it is the horizontal move — from the numeral's right
-   * shoulder to directly above it — that is the actual difference.
-   */
-  it("indonesian moves the ordinal over the numeral instead of beside it", () => {
-    const id = collage(unicornSet("id"), unicornSet("id").input.members[0], ctx);
-    const en = collage(set, set.input.members[0], ctx);
-    expect(text(id, "ordinal").text).toBe("ke-");
-
-    // Indonesian starts it at the numeral's own left edge; English sets it out to the right, past
-    // the middle of the numeral's column, where the sample puts its "st".
-    expect(text(id, "ordinal").x).toBeLessThan(text(id, "numeral").x + 0.1 * text(id, "numeral").maxWidth);
-    expect(text(en, "ordinal").x).toBeGreaterThan(text(en, "numeral").x + 0.5 * text(en, "numeral").maxWidth);
-  });
 });

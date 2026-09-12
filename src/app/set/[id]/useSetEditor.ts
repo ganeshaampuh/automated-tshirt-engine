@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import {
   DEFAULT_FONT,
   SetInputSchema,
+  canvasFor,
   defaultWording,
   expand,
   isWithinSafeArea,
@@ -25,6 +26,15 @@ export type LayerPatch = Partial<Omit<TextLayer, "id" | "type">> & Partial<Omit<
 
 /** "set" spreads an edit across every member (and into the shared style); "member" keeps it local. */
 export type Scope = "set" | "member";
+
+/**
+ * Where an edit lands for a shop that never touches the scope toggle.
+ *
+ * The open shirt, not the set: a nudge meant for one member that quietly moved four is work to
+ * undo across four tabs, while a set-wide change the shop has to ask for costs one click on the
+ * toggle. Default to the mistake that is cheap to recover from.
+ */
+export const DEFAULT_SCOPE: Scope = "member";
 
 /** Where a reorder sends the layer, in the renderer's own direction: the last id is drawn on top. */
 export type Move = "front" | "forward" | "backward" | "back";
@@ -73,6 +83,41 @@ function syncWording(wording: Wording, prev: SetInput, next: SetInput): Wording 
   const out = { ...wording };
   for (const key of Object.keys(after) as (keyof Wording)[]) {
     if (out[key] === before[key]) out[key] = after[key];
+  }
+  return out;
+}
+
+/**
+ * The override fields that are lengths, and so mean something different on a canvas of another
+ * size. Everything absent from this list — a colour, a font, an alignment, a rotation in degrees,
+ * a line count, a `src` — carries across unchanged.
+ */
+const SCALED_FIELDS = ["x", "y", "w", "h", "size", "maxWidth", "letterSpacing"] as const;
+/** Lengths that live one level down, inside `stroke` and `shadow`. Their colours do not scale. */
+const SCALED_NESTED: Record<string, readonly string[]> = { stroke: ["width"], shadow: ["blur", "dx", "dy"] };
+
+/**
+ * The same edit, expressed on a canvas `ratio` times the size of the one it was made on.
+ *
+ * A set-scoped edit is dragged on whichever member's tab is open and then written to every other
+ * member, and `canvasFor` gives each size class its own pixel square — 3425 for adult, 2362 for
+ * kids-1-9, 2126 for kids-0-1. A pixel copied verbatim from one to another is not the same place:
+ * dragging a layer near the right edge of an adult shirt used to push it clean off a kid's.
+ *
+ * One scalar is enough because the canvases are square and the template measures everything
+ * against `canvas.w`, `safeArea`'s 3% inset included — so the composition arrives proportionally
+ * identical rather than merely on-canvas.
+ */
+export function scaleGeometry(patch: Record<string, unknown>, ratio: number): Record<string, unknown> {
+  if (ratio === 1) return patch;
+  const out = { ...patch };
+  for (const k of SCALED_FIELDS) if (typeof out[k] === "number") out[k] = (out[k] as number) * ratio;
+  for (const [key, fields] of Object.entries(SCALED_NESTED)) {
+    const nested = out[key];
+    if (!nested || typeof nested !== "object") continue;
+    const copy = { ...(nested as Record<string, unknown>) };
+    for (const f of fields) if (typeof copy[f] === "number") copy[f] = (copy[f] as number) * ratio;
+    out[key] = copy;
   }
   return out;
 }
@@ -169,7 +214,10 @@ export function reducer(state: EditorState, action: Action): EditorState {
       }
 
       const touched = scope === "set" ? () => true : (m: Member) => m.id === action.memberId;
-      return { ...state, style, input: mapMembers(state.input, touched, m => withOverride(m, layerId, override)) };
+      // The canvas the edit was actually made on: the open tab's, which is the one the shop dragged.
+      const source = state.input.members.find(m => m.id === action.memberId)?.sizeClass;
+      return { ...state, style, input: mapMembers(state.input, touched, m => withOverride(m, layerId,
+        scaleGeometry(override, source ? canvasFor(m.sizeClass).w / canvasFor(source).w : 1))) };
     }
 
     case "reorderLayer": {

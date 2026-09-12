@@ -15,7 +15,7 @@ export const unicornSet = (language: "en" | "id" = "en"): Set => ({
     template: "collage", font: "Fredoka",
     palette: { primary: "#e6007e", secondary: "#f9a8d4", outline: "#e6007e" },
     clipartSrc: "tests/fixtures/unicorn.png",
-    wording: defaultWording({ kidName: "Keisya", age: 5, language }),
+    wording: defaultWording({ kidName: "Keisya", age: 5 }),
   },
 });
 export const CLIPART_SIZE = { w: 1000, h: 800 };
