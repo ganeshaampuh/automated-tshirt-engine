@@ -83,13 +83,17 @@ describe("renderDesign", () => {
     );
   });
 
-  it("matches goldens for every member, en and id", async () => {
-    for (const lang of ["en", "id"] as const) {
-      const s = unicornSet(lang);
-      for (const m of s.input.members) {
-        const buf = await renderDesign(collage(s, m, ctx), opts);
-        expectGolden(`collage-${lang}-${m.id}`, buf);
-      }
+  /**
+   * One language, so one set of goldens. The shirt is set in English whatever `language` the shop
+   * recorded (see `defaultWording`), so an "id" pass would render the same pixels under a second
+   * name; that the language no longer reaches the artwork is asserted in `wording.test.ts`, where
+   * it costs no image comparison.
+   */
+  it("matches goldens for every member", async () => {
+    const s = unicornSet("en");
+    for (const m of s.input.members) {
+      const buf = await renderDesign(collage(s, m, ctx), opts);
+      expectGolden(`collage-en-${m.id}`, buf);
     }
   }, 60_000);
 
