@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportSetAction, generateClipartAction, generateStyleAction, saveSet, uploadClipartAction } from "@/app/actions/sets";
+import { setTitle } from "@/lib/setTitle";
 import { CanvasPanel, type View } from "./components/CanvasPanel";
 import { InputsPanel } from "./components/InputsPanel";
 import { Inspector } from "./components/Inspector";
+import { HiddenLayers } from "./components/HiddenLayers";
 import { MemberTabs } from "./components/MemberTabs";
 import { SizeReadout } from "./components/SizeReadout";
 import { Button, ToastHost, useAction, useToast } from "@/app/components/ui";
@@ -30,7 +32,7 @@ const STATUS: Record<string, string> = {
 function Editor({ initial }: { initial: Initial }) {
   const { show } = useToast();
   const editor = useSetEditor(initial, { save: saveSet, onError: show });
-  const { state, dispatch, designs, design, unsafeIds, warning, error, selected, setSelected, memberId, setMemberId, status } = editor;
+  const { state, dispatch, designs, design, hidden, unsafeIds, warning, error, selected, setSelected, memberId, setMemberId, status } = editor;
   const { undo, redo, canUndo, canRedo } = editor;
 
   useUndoRedoKeys(undo, redo);
@@ -57,6 +59,21 @@ function Editor({ initial }: { initial: Initial }) {
     [dispatch, design, memberId, scope],
   );
 
+  // Deleting takes the layer out of the design, so the selection it was holding is now a dangling
+  // id; clearing it puts the inspector back to its "pick something" state rather than blank.
+  const onHide = useCallback(
+    (layerId: string) => {
+      dispatch({ type: "patchLayer", memberId, layerId, patch: { hidden: true }, scope });
+      setSelected(null);
+    },
+    [dispatch, memberId, scope, setSelected],
+  );
+
+  const onShow = useCallback(
+    (layerId: string) => dispatch({ type: "patchLayer", memberId, layerId, patch: { hidden: false }, scope }),
+    [dispatch, memberId, scope],
+  );
+
   useReorderKeys(selected, onReorder);
 
   const actions = useMemo(
@@ -67,12 +84,14 @@ function Editor({ initial }: { initial: Initial }) {
         if (!res.ok) return res;
         dispatch({ type: "setInput", patch: { clipartSrc: res.data.url } });
       },
-      uploadClipart: async (file: File) => {
+      uploadClipart: async (file: File, readColors: boolean) => {
         const form = new FormData();
         form.set("file", file);
-        const res = await uploadClipartAction(state.id, form);
+        const res = await uploadClipartAction(state.id, form, readColors);
         if (!res.ok) return res;
         dispatch({ type: "setInput", patch: { clipartSrc: res.data.url } });
+        // Absent when the option was off, or when reading the colors failed and the upload stood.
+        if (res.data.style) dispatch({ type: "loaded", style: res.data.style });
       },
       generateStyle: async (note?: string) => {
         const res = await generateStyleAction(state.id, note);
@@ -91,7 +110,8 @@ function Editor({ initial }: { initial: Initial }) {
           Kaos Ulang Tahun
         </Link>
         <span className="text-rule">/</span>
-        <span className="truncate font-display text-[15px]">{state.input.kidName || "Set baru"}</span>
+        {/* Same rule the homepage row uses, so a named set reads the same in both places. */}
+        <span className="truncate font-display text-[15px]">{setTitle(state.input).title || "Set baru"}</span>
         <span className={`text-[12px] ${status === "error" || status === "invalid" ? "text-alert" : "text-muted"}`} data-testid="save-status">
           {STATUS[status]}
         </span>
@@ -168,7 +188,9 @@ function Editor({ initial }: { initial: Initial }) {
             onPatch={onPatch}
             onReset={layerId => dispatch({ type: "resetOverride", memberId, layerId })}
             onReorder={onReorder}
+            onHide={onHide}
           />
+          <HiddenLayers ids={hidden} onShow={onShow} />
         </aside>
       </div>
     </div>

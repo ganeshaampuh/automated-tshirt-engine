@@ -12,6 +12,14 @@ Flow: `Set` (input + style) → `expand()` → one `Design` per member →
 - Layers must stay inside the 3% safe area; `isWithinSafeArea()` guards export.
 - Layer ids from the Collage template are stable: `numeral, clipart, top,
   ordinal, occasion, bottom`. Member `overrides` are keyed by these ids.
+- **Deleting a layer is `hidden: true` on an override**, never a removal: the
+  template rebuilds its stack from the wording on every run, so a removed layer
+  would come straight back. `expand()` strips hidden layers as its **last**
+  step — after `applyOrder`, or a hidden id would make a stored order look
+  stale and throw away the member's arrangement — and reports what it dropped
+  as `hidden`, so the editor can offer the layer back. Nothing downstream of
+  `expand` knows the concept exists. An all-hidden design is refused by
+  `exportPrintPng` rather than cropped to nothing.
 - Fonts: only families in `fonts.ts`, files in `public/fonts`. Every family
   ships as **static instances**, one file per weight — never a variable font,
   because skia (`@napi-rs/canvas`) ignores the `wght` axis and would print the

@@ -22,10 +22,25 @@ export function ensureContrast(color: string, against: string, min = 3): string 
   return c;
 }
 
+/**
+ * The palette a clipart implies: its two most common colors, with the primary pushed away from the
+ * shirt until it can be read on it. The defaults stand in when `dominantColors` found nothing —
+ * a fully transparent or all-white image yields an empty list.
+ *
+ * This is the one definition of that rule; both the AI-unavailable path (`fallbackStyle`) and the
+ * read-colors-on-upload path go through it, so the two cannot drift apart.
+ */
+export function paletteFromColors(colors: string[], shirtColor: string): SetStyle["palette"] {
+  const [p = "#e6007e", s = "#f9a8d4"] = colors;
+  const primary = ensureContrast(p, shirtColor);
+  return { primary, secondary: s, outline: primary };
+}
+
 export function fallbackStyle(input: SetInput, clipart: { url: string; meta: ClipartMeta }): SetStyle {
-  const [p = "#e6007e", s = "#f9a8d4"] = clipart.meta.dominantColors;
-  const primary = ensureContrast(p, input.shirtColor);
-  return { template: "collage", font: DEFAULT_FONT, palette: { primary, secondary: s, outline: primary }, clipartSrc: clipart.url, wording: defaultWording(input) };
+  return {
+    template: "collage", font: DEFAULT_FONT, palette: paletteFromColors(clipart.meta.dominantColors, input.shirtColor),
+    clipartSrc: clipart.url, wording: defaultWording(input),
+  };
 }
 
 export async function chooseStyle(input: SetInput, clipart: { url: string; meta: ClipartMeta }, deps: { provider: AIProvider }, note?: string) {

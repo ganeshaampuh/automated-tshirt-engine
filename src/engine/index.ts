@@ -7,3 +7,4 @@ export { fitText, type TextMeasurer } from "./textFit";
 export { defaultWording, ordinalSuffix, resolveLines } from "./wording";
 export { collage, type TemplateContext } from "./templates/collage";
 export { expand, applyOverrides } from "./expand";
+export { setFonts } from "./setFonts";

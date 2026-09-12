@@ -4,6 +4,8 @@ import { SetInputSchema } from "@/engine";
 import { db, schema } from "@/db";
 import { RowDelete } from "@/app/components/RowDelete";
 import { ToastHost } from "@/app/components/ui";
+import { groupByDay, timeOfDay } from "@/lib/dayGroups";
+import { setTitle } from "@/lib/setTitle";
 import { type BatchStatus, type SetStatus } from "@/lib/memberState";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +45,10 @@ export default async function Home() {
     db.select().from(schema.sets).orderBy(desc(schema.sets.updatedAt)).limit(30).catch(() => []),
     db.select().from(schema.batches).orderBy(desc(schema.batches.updatedAt)).limit(10).catch(() => []),
   ]);
+
+  // Grouped once here rather than per-render: the rows already arrive newest first, so the groups
+  // come out in that order too.
+  const setDays = groupByDay(rows, row => row.updatedAt, new Date());
 
   return (
     // The lists are server-rendered; `ToastHost` is here so each row's delete has somewhere to
@@ -108,36 +114,40 @@ export default async function Home() {
               Belum ada set. Mulai dari nama anak dan temanya.
             </p>
           ) : (
-            <ul className="border-t border-rule">
-              {rows.map(row => {
-                const parsed = SetInputSchema.safeParse(row.input);
-                const input = parsed.success ? parsed.data : null;
-                return (
-                  <li key={row.id} className="flex items-center gap-2 border-b border-rule pr-1">
-                    <Link href={`/set/${row.id}`} className="flex flex-1 items-baseline gap-3 overflow-hidden px-1 py-3 transition-colors hover:bg-panel">
-                      {input && (
-                        <span
-                          aria-hidden
-                          className="size-3 self-center rounded-full border border-rule"
-                          style={{ background: input.shirtColor }}
-                        />
-                      )}
-                      <span className="font-display text-[15px]">{input?.kidName ?? "Data rusak"}</span>
-                      {input && (
-                        <span className="text-[13px] text-muted">
-                          {input.age} tahun, {input.members.length} kaos
-                        </span>
-                      )}
-                      <span className="ml-auto text-[12px] text-muted">{statusLabel(row.status)}</span>
-                      <span className="w-[104px] text-right font-mono text-[12px] text-muted tabular-nums">{when(row.updatedAt)}</span>
-                    </Link>
-                    {/* "Data rusak" is the name when the input will not parse — a row in exactly that
-                        state is the one a shop most wants to be able to throw away. */}
-                    <RowDelete kind="set" id={row.id} name={input?.kidName ?? "Set ini"} status={row.status} />
-                  </li>
-                );
-              })}
-            </ul>
+            // One list per day, each under its own heading. The row keeps only a clock time: the day
+            // it belongs to is already stated above it.
+            setDays.map(day => (
+              <section key={day.key} className="mt-5 first:mt-0">
+                <h3 className="pb-1.5 font-display text-[12px] tracking-wide text-muted uppercase">{day.label}</h3>
+                <ul className="border-t border-rule">
+                  {day.rows.map(row => {
+                    const parsed = SetInputSchema.safeParse(row.input);
+                    const input = parsed.success ? parsed.data : null;
+                    const { title, subtitle } = setTitle(input);
+                    return (
+                      <li key={row.id} className="flex items-center gap-2 border-b border-rule pr-1">
+                        <Link href={`/set/${row.id}`} className="flex flex-1 items-baseline gap-3 overflow-hidden px-1 py-3 transition-colors hover:bg-panel">
+                          <span className="truncate font-display text-[15px]">{title}</span>
+                          {input && (
+                            <span className="shrink-0 text-[13px] text-muted">
+                              {subtitle && `${subtitle} · `}
+                              {input.age} tahun, {input.members.length} kaos
+                            </span>
+                          )}
+                          <span className="ml-auto shrink-0 text-[12px] text-muted">{statusLabel(row.status)}</span>
+                          <span className="w-[52px] shrink-0 text-right font-mono text-[12px] text-muted tabular-nums">
+                            {timeOfDay(row.updatedAt)}
+                          </span>
+                        </Link>
+                        {/* "Data rusak" is the name when the input will not parse — a row in exactly that
+                            state is the one a shop most wants to be able to throw away. */}
+                        <RowDelete kind="set" id={row.id} name={title} status={row.status} />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))
           )}
         </section>
       </div>

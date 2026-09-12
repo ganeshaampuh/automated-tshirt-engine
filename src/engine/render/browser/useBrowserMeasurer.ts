@@ -16,16 +16,33 @@ export function createBrowserMeasurer(): TextMeasurer {
   };
 }
 
-export function useBrowserMeasurer(): TextMeasurer | null {
-  const [m, setM] = useState<TextMeasurer | null>(null);
+/**
+ * A measurer that is only handed out once the fonts it will be asked about are in the browser.
+ *
+ * Measuring against a fallback face produces widths the print renderer will not reproduce, so the
+ * canvas must wait — but only for the faces `families` names. A design using one family waits on
+ * one file, not on all nine.
+ *
+ * Two rules hold this together:
+ *
+ *   - the hook is keyed on the *content* of `families`, not its identity, so a caller may build the
+ *     list inline on every render;
+ *   - once a measurer exists it is never withdrawn. Picking a new font in the inspector loads that
+ *     face while the previous measurer keeps working, and the swap happens when the file lands —
+ *     otherwise the canvas would blank on every font change.
+ */
+export function useBrowserMeasurer(families: string[]): TextMeasurer | null {
+  // `|` and not a space: a family name has spaces in it ("Baloo 2"), and this key is split again.
+  const key = [...families].sort().join("|");
+  const [loaded, setLoaded] = useState<{ key: string; measure: TextMeasurer } | null>(null);
   useEffect(() => {
     let alive = true;
-    loadEngineFonts().then(() => {
-      if (alive) setM(createBrowserMeasurer());
+    loadEngineFonts(key ? key.split("|") : []).then(() => {
+      if (alive) setLoaded({ key, measure: createBrowserMeasurer() });
     });
     return () => {
       alive = false;
     };
-  }, []);
-  return m;
+  }, [key]);
+  return loaded?.measure ?? null;
 }

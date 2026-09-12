@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { SetInputSchema, SetStyleSchema, type SetInput, type SetStyle } from "@/engine";
 import { createNodeMeasurer, loadImageFromFile } from "@/engine/server";
-import { getProvider, generateClipart, describeClipart, chooseStyle } from "@/ai";
+import { getProvider, generateClipart, describeClipart, chooseStyle, dominantColors } from "@/ai";
 import { db, schema } from "@/db";
 import { clipartPatch } from "@/db/clipart";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
@@ -13,6 +13,7 @@ import { putBlob } from "@/lib/blob";
 import { clipartSize, exportSetZip, newByteCache } from "@/lib/sets";
 import { RemoteImageError } from "@/lib/remoteImage";
 import { processClipartUpload } from "@/lib/clipartUpload";
+import { styleWithPalette } from "@/lib/clipartPalette";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MESSAGE } from "@/lib/upload";
 import { initialStates, setMemberState, type MemberStates } from "@/lib/memberState";
 
@@ -116,9 +117,10 @@ export async function generateClipartAction(id: string): Promise<ActionResult<{ 
 export async function uploadClipartAction(
   id: string,
   form: FormData,
-): Promise<ActionResult<{ url: string; width: number; height: number }>> {
+  readColors = false,
+): Promise<ActionResult<{ url: string; width: number; height: number; style?: SetStyle }>> {
   return action(async () => {
-    await loadSet(id); // 404s early and keeps the same error vocabulary
+    const loaded = await loadSet(id); // 404s early and keeps the same error vocabulary
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) fail("Pilih file gambar dulu.");
     if (file.size > MAX_UPLOAD_BYTES) fail(MAX_UPLOAD_MESSAGE);
@@ -129,12 +131,24 @@ export async function uploadClipartAction(
     } catch (e) {
       fail("Gagal memproses gambar, coba file lain.", e);
     }
+    // Read from the buffer already in hand, never by fetching back the URL just written: these are
+    // the same bytes, and `src/lib/sets.ts` holds the line at one fetch per src.
+    let style: SetStyle | undefined;
+    if (readColors) {
+      try {
+        style = styleWithPalette(loaded.style, loaded.input, url, await dominantColors(png));
+      } catch (e) {
+        // Colors are an assist, not the point of the upload: keep the clipart the shop just chose
+        // rather than failing the whole action over a palette.
+        console.error("[sets] Gagal membaca warna clipart:", e instanceof Error ? e.message : e);
+      }
+    }
     try {
-      await saveClipart(id, url);
+      await write(id, style ? { ...clipartPatch(url), style } : clipartPatch(url));
     } catch (e) {
       fail("Gagal menyimpan clipart.", e);
     }
-    return { url, width, height };
+    return { url, width, height, style };
   });
 }
 

@@ -85,3 +85,57 @@ describe("applyOrder", () => {
     expect(stack(s)).toEqual(stack());
   });
 });
+
+describe("expand, hidden layers", () => {
+  it("drops a layer an override hid", () => {
+    const s = unicornSet();
+    s.input.members[0].overrides = { bottom: { hidden: true } };
+    const d = expand(s, ctx)[0].design;
+    expect(d.layers.map(l => l.id)).not.toContain("bottom");
+  });
+
+  it("hides that layer only on the member that asked", () => {
+    const s = unicornSet();
+    s.input.members[0].overrides = { bottom: { hidden: true } };
+    const out = expand(s, ctx);
+    expect(out[0].design.layers.map(l => l.id)).not.toContain("bottom");
+    expect(out[3].design.layers.map(l => l.id)).toContain("bottom");
+  });
+
+  it("keeps the member's stacking when one of the ordered layers is hidden", () => {
+    // The stored order still names the template's whole stack, so it must not be discarded as
+    // stale just because a layer in it is on its way out.
+    const s = unicornSet();
+    const full = expand(s, ctx)[0].design.layers.map(l => l.id);
+    const reversed = [...full].reverse();
+    s.input.members[0].order = reversed;
+    s.input.members[0].overrides = { [full[0]]: { hidden: true } };
+    const d = expand(s, ctx)[0].design;
+    expect(d.layers.map(l => l.id)).toEqual(reversed.filter(id => id !== full[0]));
+  });
+
+  it("brings the layer back when hidden goes false, keeping its other tweaks", () => {
+    const s = unicornSet();
+    s.input.members[0].overrides = { bottom: { hidden: false, color: "#123456" } };
+    const d = expand(s, ctx)[0].design;
+    expect(d.layers.find(l => l.id === "bottom")).toMatchObject({ color: "#123456" });
+  });
+});
+
+describe("expand, reporting what it hid", () => {
+  // The editor needs this list to offer the layer back: a hidden layer is gone from the design, so
+  // it cannot be clicked on the canvas, and nothing else knows it ever existed.
+  it("names the layers it dropped, per member", () => {
+    const s = unicornSet();
+    s.input.members[0].overrides = { bottom: { hidden: true }, top: { hidden: true } };
+    const out = expand(s, ctx);
+    expect(out[0].hidden.sort()).toEqual(["bottom", "top"]);
+    expect(out[3].hidden).toEqual([]);
+  });
+
+  it("does not name an override for a layer this member's template never drew", () => {
+    const s = unicornSet();
+    s.input.members[0].overrides = { nosuchlayer: { hidden: true } };
+    expect(expand(s, ctx)[0].hidden).toEqual([]);
+  });
+});

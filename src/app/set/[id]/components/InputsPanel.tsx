@@ -14,7 +14,7 @@ type Ran = Promise<ActionResult<unknown> | void>;
 
 export type InputsActions = {
   generateClipart: () => Ran;
-  uploadClipart: (file: File) => Ran;
+  uploadClipart: (file: File, readColors: boolean) => Ran;
   generateStyle: (note?: string) => Ran;
 };
 
@@ -32,6 +32,8 @@ export function InputsPanel({
   const { pending, run } = useAction();
   const { show } = useToast();
   const [note, setNote] = useState("");
+  // A shop habit, not set data: it steers the next upload and is deliberately not saved with the set.
+  const [readColors, setReadColors] = useState(true);
   const file = useRef<HTMLInputElement>(null);
   const name = useRef<HTMLInputElement>(null);
 
@@ -44,6 +46,18 @@ export function InputsPanel({
   return (
     <div className="divide-y divide-rule">
       <Section title="Pesanan">
+        {/* The shop's label for this order. Blank is stored as absent, not as an empty string, so
+            "unnamed" has one representation and the list falls back to the child's name. */}
+        <Field label="Nama set">
+          <input
+            className="field"
+            data-testid="set-name"
+            value={input.name ?? ""}
+            placeholder="Opsional, mis. Pesanan Bu Rina"
+            maxLength={80}
+            onChange={e => set({ name: e.target.value.trim() === "" ? undefined : e.target.value })}
+          />
+        </Field>
         <Field label="Nama anak">
           <input
             ref={name}
@@ -130,6 +144,15 @@ export function InputsPanel({
             <Button pending={pending === "upload"} onClick={() => file.current?.click()}>
               Upload gambar
             </Button>
+            <label className="flex cursor-pointer items-center gap-1.5 pt-0.5 text-[12px] text-muted">
+              <input
+                type="checkbox"
+                data-testid="read-colors"
+                checked={readColors}
+                onChange={e => setReadColors(e.target.checked)}
+              />
+              Baca warna saat upload
+            </label>
             <input
               ref={file}
               data-testid="clipart-upload"
@@ -146,7 +169,7 @@ export function InputsPanel({
                   show(MAX_UPLOAD_MESSAGE);
                   return;
                 }
-                run("upload", () => actions.uploadClipart(f));
+                run("upload", () => actions.uploadClipart(f, readColors));
               }}
             />
           </div>

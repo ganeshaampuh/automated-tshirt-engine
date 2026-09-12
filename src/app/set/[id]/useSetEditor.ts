@@ -7,6 +7,7 @@ import {
   defaultWording,
   expand,
   isWithinSafeArea,
+  setFonts,
   type Design,
   type ImageLayer,
   type Member,
@@ -254,7 +255,8 @@ export function useSetEditor(initial: Initial, deps: EditorDeps = {}) {
   const undo = useCallback(() => dispatch({ type: "undo" }), []);
   const redo = useCallback(() => dispatch({ type: "redo" }), []);
   const [selected, setSelected] = useState<string | null>(null);
-  const measure = useBrowserMeasurer();
+  // Only the faces this set can draw with, so the first canvas never waits on the whole registry.
+  const measure = useBrowserMeasurer(setFonts(state.input, state.style));
   const clipart = useImageSize(state.style?.clipartSrc ?? state.input.clipartSrc);
 
   // A clipart with no style yet gets the starter style, so the canvas is never blank while waiting
@@ -265,17 +267,23 @@ export function useSetEditor(initial: Initial, deps: EditorDeps = {}) {
     if (starter) dispatch({ type: "loaded", style: starter });
   }, [state.style, state.input]);
 
-  const { designs, error } = useMemo(() => {
-    if (!measure || !clipart || !state.style) return { designs: null, error: null };
+  const { designs, hiddenByMember, error } = useMemo(() => {
+    if (!measure || !clipart || !state.style) return { designs: null, hiddenByMember: null, error: null };
     try {
       const list = expand({ input: state.input, style: state.style }, { measure, clipart });
-      return { designs: new Map(list.map(d => [d.memberId, d.design])), error: null };
+      return {
+        designs: new Map(list.map(d => [d.memberId, d.design])),
+        hiddenByMember: new Map(list.map(d => [d.memberId, d.hidden])),
+        error: null,
+      };
     } catch {
-      return { designs: null, error: "Ada layer dengan ukuran tidak masuk akal. Klik Reset override." };
+      return { designs: null, hiddenByMember: null, error: "Ada layer dengan ukuran tidak masuk akal. Klik Reset override." };
     }
   }, [state.input, state.style, measure, clipart]);
 
   const design: Design | null = designs?.get(state.memberId) ?? null;
+  // What the open tab has deleted — the only handle the shop has on a layer that is no longer drawn.
+  const hidden: string[] = hiddenByMember?.get(state.memberId) ?? [];
   const unsafeIds = useMemo(() => unsafeMemberIds(designs), [designs]);
   const warning = useMemo(() => safetyWarning(state.input.members, unsafeIds), [state.input.members, unsafeIds]);
   const valid = useMemo(() => SetInputSchema.safeParse(state.input).success, [state.input]);
@@ -322,6 +330,7 @@ export function useSetEditor(initial: Initial, deps: EditorDeps = {}) {
     dispatch,
     designs,
     design,
+    hidden,
     unsafeIds,
     warning,
     error,

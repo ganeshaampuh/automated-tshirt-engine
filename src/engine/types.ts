@@ -28,10 +28,19 @@ const ClipartSrc = z.string().refine(isAllowedImageSrc, {
   message: "image src must be an https URL, a data: image, or a bundled asset path",
 });
 
+/**
+ * A layer the shop has taken out of this member's design.
+ *
+ * Deleting cannot mean removing the layer: `collage` rebuilds the stack from the wording every time
+ * it runs, so a removed layer would simply come back. It is an override like any other, which is
+ * what makes it undoable, restorable, and storable in the document already being saved.
+ */
+const Hidden = z.boolean().optional();
+
 export const ImageLayerSchema = z.object({
   id: z.string(), type: z.literal("image"), src: ClipartSrc,
   x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive(),
-  rotation: z.number().optional(),
+  rotation: z.number().optional(), hidden: Hidden,
 });
 export type ImageLayer = z.infer<typeof ImageLayerSchema>;
 
@@ -46,7 +55,7 @@ export const TextLayerSchema = z.object({
   align: z.enum(["left", "center", "right"]),
   x: z.number(), y: z.number(), maxWidth: z.number().positive(),
   lines: z.number().int().positive().default(1),
-  rotation: z.number().optional(),
+  rotation: z.number().optional(), hidden: Hidden,
 });
 export type TextLayer = z.infer<typeof TextLayerSchema>;
 
@@ -78,6 +87,10 @@ export type Member = z.infer<typeof MemberSchema>;
 export const SetInputSchema = z.object({
   kidName: z.string().min(1), age: z.number().int().min(0).max(120), theme: z.string().min(1),
   clipartSrc: ClipartSrc.optional(), shirtColor: Hex, language: LanguageSchema,
+  // What the shop calls this set — an order label like "Pesanan Bu Rina", not anything the renderer
+  // reads. Optional because every set saved before naming existed has none, and because a shop that
+  // never names a set should keep seeing the child's name; `setTitle` decides what a row shows.
+  name: z.string().min(1).max(80).optional(),
   // The shop's own order code for this set. It names the set's folder in the batch export (spec
   // §8.2), so it is capped short enough to stay a sane directory name.
   skuPrefix: z.string().min(1).max(40).optional(),

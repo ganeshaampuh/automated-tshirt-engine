@@ -79,6 +79,7 @@ export function Inspector({
   onPatch,
   onReset,
   onReorder,
+  onHide,
 }: {
   design: Design | null;
   member: Member | undefined;
@@ -86,6 +87,7 @@ export function Inspector({
   onPatch: (layerId: string, patch: LayerPatch) => void;
   onReset: (layerId: string) => void;
   onReorder: (layerId: string, move: Move) => void;
+  onHide: (layerId: string) => void;
 }) {
   const index = design?.layers.findIndex(l => l.id === selected) ?? -1;
   const layer: Layer | undefined = index < 0 ? undefined : design?.layers[index];
@@ -99,16 +101,29 @@ export function Inspector({
   const set = (patch: LayerPatch) => onPatch(layer.id, patch);
   const weights = layer.type === "text" ? fontWeights(layer.font) : [];
   const overridden = Boolean(member?.overrides?.[layer.id]);
+  const lastOne = (design?.layers.length ?? 0) <= 1;
 
   return (
     <Section
       title={LAYER_LABEL[layer.id] ?? layer.id}
       action={
-        overridden ? (
-          <Button variant="quiet" onClick={() => onReset(layer.id)}>
-            Reset
+        <div className="flex items-center gap-1">
+          {overridden && (
+            <Button variant="quiet" onClick={() => onReset(layer.id)}>
+              Reset
+            </Button>
+          )}
+          {/* A design must keep something to print, and the last layer standing is it. */}
+          <Button
+            variant="quiet"
+            data-testid="hide-layer"
+            disabled={lastOne}
+            title={lastOne ? "Satu-satunya layer yang tersisa" : "Hapus dari desain — bisa dikembalikan"}
+            onClick={() => onHide(layer.id)}
+          >
+            Hapus
           </Button>
-        ) : null
+        </div>
       }
     >
       <div className="mb-3">

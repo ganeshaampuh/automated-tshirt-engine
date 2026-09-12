@@ -2,7 +2,7 @@
 import dynamic from "next/dynamic";
 import { notFound, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
-import { collage, type Language } from "@/engine";
+import { collage, setFonts, type Language } from "@/engine";
 import { useBrowserMeasurer } from "@/engine/render/browser/useBrowserMeasurer";
 import { CLIPART_SIZE, unicornSet } from "@/lib/fixtures/unicornSet";
 
@@ -15,16 +15,18 @@ function Parity() {
   const params = useSearchParams();
   const memberId = params.get("member") ?? "ayah";
   const language = (params.get("lang") === "id" ? "id" : "en") as Language;
-  const measure = useBrowserMeasurer();
+  const set = useMemo(() => unicornSet(language), [language]);
+  // The parity screenshot is compared with the server render pixel for pixel, so the fixture's own
+  // faces are exactly the ones that must be in the browser before anything is measured.
+  const measure = useBrowserMeasurer(setFonts(set.input, set.style));
   const [ready, setReady] = useState(false);
 
   const design = useMemo(() => {
     if (!measure) return null;
-    const set = unicornSet(language);
     const member = set.input.members.find(m => m.id === memberId);
     if (!member) return null;
     return collage(set, member, { measure, clipart: CLIPART_SIZE });
-  }, [measure, language, memberId]);
+  }, [measure, set, memberId]);
 
   if (!design) return <div data-testid="stage" />;
   return (
