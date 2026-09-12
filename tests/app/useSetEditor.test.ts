@@ -22,9 +22,40 @@ describe("DEFAULT_SCOPE", () => {
 });
 
 describe("useSetEditor reducer", () => {
-  it("spreads a geometry patch over every member when the scope is the set", () => {
-    const next = run(initial(), { type: "patchLayer", memberId: "ayah", layerId: "numeral", patch: { x: 10 }, scope: "set" });
-    for (const m of next.input.members) expect(m.overrides?.numeral).toEqual({ x: 10 });
+  /**
+   * A set-scoped edit is made on one member's canvas and has to land on canvases of other sizes:
+   * adult prints 29cm, kids-1-9 20cm, kids-0-1 18cm, and `canvasFor` turns each into a different
+   * pixel square. Copying the pixel verbatim put an edit made on the adult tab 638px off the right
+   * of the kid's shirt. The canvases are square and the template places everything relative to
+   * `canvas.w`, so one ratio carries the whole composition across intact.
+   */
+  it("scales a geometry patch to each member's own canvas when the scope is the set", () => {
+    const next = run(initial(), { type: "patchLayer", memberId: "ayah", layerId: "numeral", patch: { x: 3000 }, scope: "set" });
+    const ratio = canvasFor("kids-1-9").w / canvasFor("adult").w;
+    expect(member(next, "ayah").overrides?.numeral.x).toBe(3000);
+    expect(member(next, "mama").overrides?.numeral.x).toBe(3000);
+    expect(member(next, "kid").overrides?.numeral.x as number).toBeCloseTo(3000 * ratio, 6);
+    expect(member(next, "kid").overrides?.numeral.x as number).toBeLessThan(canvasFor("kids-1-9").w);
+  });
+
+  it("scales every geometric field, nested stroke width included", () => {
+    const next = run(initial(), {
+      type: "patchLayer", memberId: "ayah", layerId: "numeral", scope: "set",
+      patch: { x: 100, y: 200, size: 300, maxWidth: 400, letterSpacing: 5, stroke: { color: "#000000", width: 8 } },
+    });
+    const r = canvasFor("kids-1-9").w / canvasFor("adult").w;
+    const o = member(next, "kid").overrides!.numeral as Record<string, number> & { stroke: { color: string; width: number } };
+    for (const [k, v] of [["x", 100], ["y", 200], ["size", 300], ["maxWidth", 400], ["letterSpacing", 5]] as const) {
+      expect(o[k]).toBeCloseTo(v * r, 6);
+    }
+    expect(o.stroke.width).toBeCloseTo(8 * r, 6);
+    // A colour is not a length.
+    expect(o.stroke.color).toBe("#000000");
+  });
+
+  it("leaves a member-scoped patch unscaled, since it never leaves its own canvas", () => {
+    const next = run(initial(), { type: "patchLayer", memberId: "kid", layerId: "numeral", patch: { x: 3000 }, scope: "member" });
+    expect(member(next, "kid").overrides?.numeral).toEqual({ x: 3000 });
   });
 
   it("keeps a member-scoped patch on that member alone", () => {
@@ -64,7 +95,14 @@ describe("useSetEditor reducer", () => {
       type: "patchLayer", memberId: "ayah", layerId: "numeral", patch: { stroke: { color: "#000000", width: 4 } }, scope: "set",
     });
     expect(next.style?.palette.outline).toBe("#000000");
-    for (const m of next.input.members) expect(m.overrides?.numeral).toEqual({ stroke: { color: "#000000", width: 4 } });
+    // The width rides along as an override, so it scales to each canvas like any other length: a
+    // 4px outline on a 29cm adult print is a heavier line than 4px on a 20cm kid's.
+    const r = canvasFor("kids-1-9").w / canvasFor("adult").w;
+    for (const m of next.input.members) {
+      const stroke = (m.overrides!.numeral as { stroke: { color: string; width: number } }).stroke;
+      expect(stroke.color).toBe("#000000");
+      expect(stroke.width).toBeCloseTo(m.sizeClass === "adult" ? 4 : 4 * r, 6);
+    }
   });
 
   it("keeps a member-scoped font or colour as an override on that member", () => {
