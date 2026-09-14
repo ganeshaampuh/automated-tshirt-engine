@@ -95,8 +95,13 @@ export function CanvasPanel({
               WebkitMaskSize: "100% 100%",
             }}
           />
-          <div className="absolute" style={{ left: shirt.chestAnchor.x * k - designW / 2, top: shirt.chestAnchor.y * k }}>
-            <DesignStage design={design} scale={designW / design.canvas.w} editable selectedId={selected} onSelect={onSelect} onChange={onPatch} />
+          {/* Preview only: the print is placed and resized in the print-area view, so nothing here
+              takes a click — a drag on the mockup would edit through the fabric shading. */}
+          <div
+            className="pointer-events-none absolute"
+            style={{ left: shirt.chestAnchor.x * k - designW / 2, top: shirt.chestAnchor.y * k }}
+          >
+            <DesignStage design={design} scale={designW / design.canvas.w} />
           </div>
           {/* The fabric's shading, over the print as well as the cloth — the same last step
               renderMockup takes, so the editor shows what gets exported. */}
@@ -116,8 +121,8 @@ export function CanvasPanel({
           value={view}
           onChange={setView}
           options={[
-            { value: "shirt" as const, label: "Di kaos" },
             { value: "print" as const, label: "Area cetak" },
+            { value: "shirt" as const, label: "Di kaos" },
           ]}
         />
         <div className="ml-auto flex items-center gap-2">

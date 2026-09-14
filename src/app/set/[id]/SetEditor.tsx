@@ -10,7 +10,7 @@ import { Inspector } from "./components/Inspector";
 import { HiddenLayers } from "./components/HiddenLayers";
 import { MemberTabs } from "./components/MemberTabs";
 import { SizeReadout } from "./components/SizeReadout";
-import { Button, ToastHost, useAction, useToast } from "@/app/components/ui";
+import { Button, Section, ToastHost, useAction, useToast } from "@/app/components/ui";
 import { DEFAULT_SCOPE, useSetEditor, type Initial, type LayerPatch, type Move, type Scope } from "./useSetEditor";
 
 export default function SetEditor({ initial }: { initial: Initial }) {
@@ -37,7 +37,8 @@ function Editor({ initial }: { initial: Initial }) {
 
   useUndoRedoKeys(undo, redo);
 
-  const [view, setView] = useState<View>("shirt");
+  // Editing happens in the print area; "Di kaos" is the preview of the result.
+  const [view, setView] = useState<View>("print");
   const [scope, setScope] = useState<Scope>(DEFAULT_SCOPE);
   const [zipUrl, setZipUrl] = useState<string | null>(null);
   const { pending, run } = useAction();
@@ -74,7 +75,8 @@ function Editor({ initial }: { initial: Initial }) {
     [dispatch, memberId, scope],
   );
 
-  useReorderKeys(selected, onReorder);
+  // Nothing edits the design from the mockup view, keyboard included.
+  useReorderKeys(view === "shirt" ? null : selected, onReorder);
 
   const actions = useMemo(
     () => ({
@@ -181,16 +183,28 @@ function Editor({ initial }: { initial: Initial }) {
         </main>
 
         <aside className="w-full shrink-0 overflow-y-auto border-t border-rule bg-panel lg:w-[280px] lg:border-t-0 lg:border-l">
-          <Inspector
-            design={design}
-            member={member}
-            selected={selected}
-            onPatch={onPatch}
-            onReset={layerId => dispatch({ type: "resetOverride", memberId, layerId })}
-            onReorder={onReorder}
-            onHide={onHide}
-          />
-          <HiddenLayers ids={hidden} onShow={onShow} />
+          {/* "Di kaos" is a preview of the finished shirt, not a second place to edit it: the whole
+              inspector goes away there rather than offering controls the canvas cannot show. */}
+          {view === "shirt" ? (
+            <Section title="Layer">
+              <p className="text-[13px] leading-relaxed text-muted">
+                Tampilan kaos cuma untuk melihat hasil. Pindah ke <strong className="font-medium text-ink">Area cetak</strong> untuk mengubah desain.
+              </p>
+            </Section>
+          ) : (
+            <>
+              <Inspector
+                design={design}
+                member={member}
+                selected={selected}
+                onPatch={onPatch}
+                onReset={layerId => dispatch({ type: "resetOverride", memberId, layerId })}
+                onReorder={onReorder}
+                onHide={onHide}
+              />
+              <HiddenLayers ids={hidden} onShow={onShow} />
+            </>
+          )}
         </aside>
       </div>
     </div>
