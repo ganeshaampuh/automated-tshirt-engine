@@ -54,12 +54,13 @@ describe("exportSetAction", () => {
   });
 });
 
-describe("home page status map", () => {
-  const page = readFileSync(path.join(__dirname, "..", "..", "src", "app", "page.tsx"), "utf8");
+describe("status labels", () => {
+  // The maps moved out of `src/app/page.tsx` when the card view needed the same words as the rows.
+  const labels = readFileSync(path.join(__dirname, "..", "..", "src", "lib", "statusLabel.ts"), "utf8");
 
   // Scoped to the *set* map: a batch has its own vocabulary next to it, and "exported" is a real
   // batch status. A set never reaches it, so the set map must still not offer it.
-  const setMap = page.slice(page.indexOf("const STATUS"), page.indexOf("const BATCH_STATUS"));
+  const setMap = labels.slice(labels.indexOf("const SET"), labels.indexOf("const BATCH"));
 
   it("lists no set status the app never writes", () => {
     expect(setMap).toContain("draft:");

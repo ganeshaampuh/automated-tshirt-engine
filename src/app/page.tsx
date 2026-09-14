@@ -3,43 +3,30 @@ import { desc } from "drizzle-orm";
 import { SetInputSchema } from "@/engine";
 import { db, schema } from "@/db";
 import { RowDelete } from "@/app/components/RowDelete";
+import { SetCards } from "@/app/components/SetCards";
 import { ToastHost } from "@/app/components/ui";
 import { groupByDay, timeOfDay } from "@/lib/dayGroups";
 import { setTitle } from "@/lib/setTitle";
-import { type BatchStatus, type SetStatus } from "@/lib/memberState";
+import { batchStatusLabel, statusLabel } from "@/lib/statusLabel";
 
 export const dynamic = "force-dynamic";
 
-const STATUS: Record<SetStatus, string> = {
-  draft: "Draft",
-  queued: "Antrean",
-  processing: "Diproses",
-  ready: "Siap",
-  approved: "Disetujui",
-  rejected: "Ditolak",
-  failed: "Gagal",
-};
+/**
+ * How the set list is drawn. It lives in the URL rather than in a client island: the page is
+ * server-rendered, and a choice restored from `localStorage` after hydration would flip the whole
+ * list from rows to cards in front of the shop on every visit. The cost is that the choice travels
+ * with the link instead of being remembered — a bare `/` opens the rows.
+ */
+type SetView = "baris" | "kartu";
+const SET_VIEW_PARAM = "set";
 
-const BATCH_STATUS: Record<BatchStatus, string> = {
-  processing: "Diproses",
-  ready: "Siap",
-  exporting: "Diekspor",
-  exported: "Selesai",
-  failed: "Gagal",
-};
-
-function statusLabel(status: string): string {
-  return status in STATUS ? STATUS[status as SetStatus] : status;
-}
-
-function batchStatusLabel(status: string): string {
-  return status in BATCH_STATUS ? BATCH_STATUS[status as BatchStatus] : status;
-}
+const setViewOf = (value: string | string[] | undefined): SetView => (value === "kartu" ? "kartu" : "baris");
 
 const when = (d: Date) =>
   new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d);
 
-export default async function Home() {
+export default async function Home(props: PageProps<"/">) {
+  const view = setViewOf((await props.searchParams)[SET_VIEW_PARAM]);
   // The two lists are independent; a database that is down empties both rather than erroring the page.
   const [rows, batchRows] = await Promise.all([
     db.select().from(schema.sets).orderBy(desc(schema.sets.updatedAt)).limit(30).catch(() => []),
@@ -107,12 +94,21 @@ export default async function Home() {
         )}
 
         <section>
-          <h2 className="font-display text-[15px]">Set</h2>
-          <p className="mt-0.5 mb-3 text-[13px] text-muted">Satu ulang tahun, satu desain per anggota keluarga.</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+            <div>
+              <h2 className="font-display text-[15px]">Set</h2>
+              <p className="mt-0.5 mb-3 text-[13px] text-muted">Satu ulang tahun, satu desain per anggota keluarga.</p>
+            </div>
+            {/* Two links, not a toggle: the switch is a different URL for the same page, so it needs
+                no JavaScript and survives a reload. Hidden when there is nothing to draw either way. */}
+            {rows.length > 0 && <SetViewSwitch view={view} />}
+          </div>
           {rows.length === 0 ? (
             <p className="border border-dashed border-rule px-4 py-10 text-center text-[14px] text-muted">
               Belum ada set. Mulai dari nama anak dan temanya.
             </p>
+          ) : view === "kartu" ? (
+            <SetCards days={setDays} />
           ) : (
             // One list per day, each under its own heading. The row keeps only a clock time: the day
             // it belongs to is already stated above it.
@@ -152,5 +148,33 @@ export default async function Home() {
         </section>
       </div>
     </ToastHost>
+  );
+}
+
+/** The row/card switch: the current view is stated, the other one is a link to itself. */
+function SetViewSwitch({ view }: { view: SetView }) {
+  const options: { value: SetView; label: string }[] = [
+    { value: "baris", label: "Baris" },
+    { value: "kartu", label: "Kartu" },
+  ];
+  return (
+    <div className="mb-3 flex shrink-0 items-center overflow-hidden rounded-[var(--radius-ctl)] border border-rule bg-panel">
+      {options.map(o =>
+        o.value === view ? (
+          <span key={o.value} aria-current="true" className="bg-bench px-2.5 py-1 font-display text-[12px] text-ink">
+            {o.label}
+          </span>
+        ) : (
+          <Link
+            key={o.value}
+            // `baris` is the default, so its link drops the parameter rather than spelling it out.
+            href={o.value === "baris" ? "/" : `/?${SET_VIEW_PARAM}=${o.value}`}
+            className="px-2.5 py-1 font-display text-[12px] text-muted transition-colors hover:bg-bench hover:text-ink"
+          >
+            {o.label}
+          </Link>
+        ),
+      )}
+    </div>
   );
 }

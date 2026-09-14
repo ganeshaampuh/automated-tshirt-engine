@@ -5,6 +5,7 @@ import { z } from "zod";
 import { SizeClassSchema, type Design, type SizeClass } from "./types";
 import { maxCm } from "./sizing";
 import { renderDesign, type RenderOpts } from "./render/server";
+import { MOCKUP_BACKDROP } from "@/lib/setPreview";
 
 export const ShirtAssetSchema = z.object({
   id: z.string().min(1),
@@ -91,7 +92,7 @@ export async function renderMockup(design: Design, shirt: ShirtAsset, opts: { lo
     : composed;
 
   return sharp(shaded)
-    .flatten({ background: "#f3f3f3" })
+    .flatten({ background: MOCKUP_BACKDROP })
     .resize({ width: outW })
     .jpeg({ quality: 88 })
     .toBuffer();
