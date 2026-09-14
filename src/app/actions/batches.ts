@@ -9,7 +9,7 @@ import { strandedSets } from "@/db/claimSets";
 import { approvable, deletable, isUnderway } from "@/app/batch/[id]/galleryRules";
 import { action, ActionError, type ActionResult } from "@/lib/actionResult";
 import { deleteBlob, deleteBlobs, putBlob } from "@/lib/blob";
-import { rowsToInserts } from "@/lib/batchInserts";
+import { duplicateInsert, rowsToInserts } from "@/lib/batchInserts";
 import { parseBatchRows, type ParsedRow, type RowError } from "@/lib/csv";
 import { initialStates } from "@/lib/memberState";
 import { STALE_CLAIM_MINUTES, TICK_MAX_SECONDS } from "@/lib/processSet";
@@ -296,6 +296,50 @@ export async function regenerateSetAction(id: string, note?: string): Promise<Ac
       revalidatePath(`/batch/${row.batchId}`);
     }
     return null;
+  });
+}
+
+/**
+ * Copies one set into a second row of the same batch.
+ *
+ * What a shop reaches for when two families order the same thing: the copy carries the original's
+ * input, members and style, is named apart from it by `duplicateInsert`, and goes in `queued` so the
+ * pipeline draws it its own artwork. Nothing about the original is touched — the row is only read,
+ * which is why a set a tick is still holding may be copied where it may not be rejected or requeued.
+ *
+ * The batch is reopened and a chain kicked exactly as `regenerateSetAction` does, and in the same
+ * order: reopened first, so the `refreshCounts` below sees a set queued and leaves the batch open
+ * for the tick instead of closing it. An exported batch is refused for the reason the tick route
+ * will not reopen one — its ZIP is written and a set added now would never appear in it.
+ */
+export async function duplicateSetAction(id: string): Promise<ActionResult<{ id: string }>> {
+  return action(async () => {
+    const row = await db.query.sets
+      .findFirst({ where: eq(sets.id, id), columns: { id: true, batchId: true, input: true, style: true } })
+      .catch(e => fail("Gagal membaca set ini.", e));
+    if (!row) fail("Set ini tidak ada.");
+
+    const batch = row.batchId
+      ? await db.query.batches.findFirst({ where: eq(batches.id, row.batchId) }).catch(e => fail("Gagal membaca batch.", e))
+      : undefined;
+    if (batch && (batch.status === "exporting" || batch.status === "exported")) {
+      fail("Batch ini sudah diekspor. Buat batch baru kalau mau menambah set.");
+    }
+
+    const [copy] = await db
+      .insert(sets)
+      .values(duplicateInsert(row))
+      .returning({ id: sets.id })
+      .catch(e => fail("Gagal menduplikasi set.", e));
+
+    if (row.batchId) {
+      await db.update(batches).set({ status: "processing", updatedAt: new Date() }).where(eq(batches.id, row.batchId));
+      await refreshCounts(row.batchId);
+      kickTick(await requestOrigin(), row.batchId);
+      revalidatePath(`/batch/${row.batchId}`);
+    }
+    revalidatePath("/");
+    return { id: copy.id };
   });
 }
 

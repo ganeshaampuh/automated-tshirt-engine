@@ -6,6 +6,7 @@ import {
   approveSetsAction,
   deleteBatchAction,
   deleteSetsAction,
+  duplicateSetAction,
   exportBatchAction,
   regenerateSetAction,
   rejectSetAction,
@@ -236,6 +237,18 @@ function Board({ batchId, name, batchStatus, updatedAt, zipUrl, batchError, sets
                   const res = await rejectSetAction(row.id);
                   if (!res.ok) return res;
                   show(`Set ${row.input.kidName} ditolak.`, "ok");
+                  router.refresh();
+                })
+              }
+              onDuplicate={() =>
+                run(`duplicate:${row.id}`, async () => {
+                  const res = await duplicateSetAction(row.id);
+                  if (!res.ok) return res;
+                  show(`Set ${row.input.kidName} diduplikasi; salinannya sedang digambar.`, "ok");
+                  // A fresh queued set is a change: give the poll its full window again so it does
+                  // not call the batch stuck while the copy is still being drawn.
+                  lastChange.current = { signature: "", at: Date.now() };
+                  setStuck(false);
                   router.refresh();
                 })
               }

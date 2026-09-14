@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Button, ConfirmButton } from "@/app/components/ui";
+import { setTitle } from "@/lib/setTitle";
 import type { MemberStates } from "@/lib/memberState";
 import type { GallerySet } from "../Gallery";
 
@@ -30,6 +31,7 @@ export function SetCard({
   onApprove,
   onReject,
   onRegenerate,
+  onDuplicate,
   onDelete,
 }: {
   row: GallerySet;
@@ -39,10 +41,15 @@ export function SetCard({
   onApprove: () => void;
   onReject: () => void;
   onRegenerate: (note: string) => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [note, setNote] = useState<string | null>(null);
-  const { kidName, age, theme } = row.input;
+  const { age, theme } = row.input;
+  // A CSV never writes a set `name`, so the only rows that carry one are the copies `duplicateInsert`
+  // named — which is exactly when a wall of cards all reading "Keisya" needs telling apart. The
+  // child's name stays on as the subtitle, and every label below names the card, not the child.
+  const { title, subtitle } = setTitle(row.input);
   const done = row.status === "approved" || row.status === "rejected";
   const busy = row.status === "queued" || row.status === "processing";
 
@@ -58,11 +65,11 @@ export function SetCard({
           // Not `ready`-only any more: the rail's delete reaches every settled set, and a batch full
           // of failures is exactly the selection a shop wants to make. Approval still filters itself.
           disabled={busy}
-          aria-label={`Pilih set ${kidName}`}
+          aria-label={`Pilih set ${title}`}
           onChange={e => onSelect(e.target.checked)}
         />
         <h2 className="font-display text-[15px] font-medium">
-          {kidName} <span className="text-muted">· {age} th</span>
+          {title} <span className="text-muted">{subtitle && `· ${subtitle} `}· {age} th</span>
         </h2>
         <p className="truncate text-[13px] text-muted">{theme}</p>
         <span
@@ -101,16 +108,28 @@ export function SetCard({
         <Button variant="quiet" data-testid="reject" disabled={busy} pending={pending === `reject:${row.id}`} onClick={onReject}>
           Tolak
         </Button>
+        {/* `ml-auto` moves here, off the delete: the pair now travels to the far end together, with
+            Duplikat first so Hapus keeps the outermost spot it has always held. It is the one control
+            in this row that adds a set rather than judging one, and it stays live while the set is
+            being drawn — the copy is built from the input, which a tick never rewrites. */}
+        <Button
+          className="ml-auto"
+          data-testid="duplicate-set"
+          pending={pending === `duplicate:${row.id}`}
+          title={`Buat satu set lagi seperti ${title}`}
+          onClick={onDuplicate}
+        >
+          Duplikat
+        </Button>
         {/* Pushed to the far end, away from Tolak: the two verdicts read alike in a hurry and only
             one of them can be taken back. Unlike its neighbours it stays live while the set is being
             drawn — a verdict on artwork that does not exist yet is meaningless, but calling off the
             drawing is exactly what a shop wants at that moment, and the label says so. */}
         <ConfirmButton
-          className="ml-auto"
           testId="delete-set"
-          confirm={busy ? `Hentikan & hapus ${kidName}?` : `Hapus ${kidName}?`}
+          confirm={busy ? `Hentikan & hapus ${title}?` : `Hapus ${title}?`}
           pending={pending === `delete:${row.id}`}
-          title={busy ? `Hentikan penggambaran ${kidName} dan hapus setnya` : `Hapus set ${kidName} untuk selamanya`}
+          title={busy ? `Hentikan penggambaran ${title} dan hapus setnya` : `Hapus set ${title} untuk selamanya`}
           onConfirm={onDelete}
         >
           Hapus
@@ -124,7 +143,7 @@ export function SetCard({
             autoFocus
             value={note}
             placeholder="Catatan buat AI, misal “warnanya lebih terang” (boleh kosong)"
-            aria-label={`Catatan untuk set ${kidName}`}
+            aria-label={`Catatan untuk set ${title}`}
             onChange={e => setNote(e.target.value)}
           />
           <Button
