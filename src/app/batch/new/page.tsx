@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Brand } from "@/app/components/Brand";
 import { MAX_MEMBERS, MAX_SETS } from "@/lib/csv";
 import { SHIRT_COLORS } from "@/lib/shirtColors";
 import UploadForm from "./UploadForm";
@@ -20,10 +20,8 @@ export default function NewBatchPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-14">
       <header className="mb-8">
-        <Link href="/" className="font-display text-[13px] text-muted transition-colors hover:text-ink">
-          ← Kembali
-        </Link>
-        <h1 className="mt-3 font-display text-[26px] leading-tight font-medium">Batch dari CSV</h1>
+        <Brand />
+        <h1 className="mt-8 font-display text-[26px] leading-tight font-medium">Batch dari CSV</h1>
         <p className="mt-1 text-[14px] text-muted">
           Unggah satu file CSV, periksa dulu, lalu buat batch. Maksimal {MAX_SETS} set dan {MAX_MEMBERS} kaos per file.
         </p>
@@ -41,13 +39,13 @@ export default function NewBatchPage() {
             <div key={col.name} className="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
               <dt className="font-mono text-[12px] text-ink">
                 {col.name}
-                {col.required && <span className="ml-1 text-[11px] text-alert">wajib</span>}
+                {col.required && <span className="ml-2 rounded-full bg-alert/10 px-1.5 py-0.5 font-sans text-[11px] text-alert">wajib</span>}
               </dt>
               <dd className="text-[13px] text-muted">{col.note}</dd>
             </div>
           ))}
         </dl>
-        <pre className="mt-4 overflow-x-auto border border-rule bg-panel px-3 py-2 font-mono text-[12px] leading-relaxed text-muted">
+        <pre className="mt-4 overflow-x-auto rounded-[var(--radius-ctl)] border border-rule bg-panel px-3 py-2 font-mono text-[12px] leading-relaxed text-muted">
 {`kid_name,age,theme,members,language,shirt_color,sku_prefix
 Keisya,5,unicorn pastel,Ayah:adult;Mama:adult;Keisya:kid,id,#ffffff,KEI
 Bima,1,dinosaurus,"Ayah:adult;Bunda:adult;Bima:kid",id,navy,BIM`}
