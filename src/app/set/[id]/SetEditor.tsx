@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Brand } from "@/app/components/Brand";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportSetAction, generateClipartAction, generateStyleAction, saveSet, uploadClipartAction } from "@/app/actions/sets";
 import { setTitle } from "@/lib/setTitle";
@@ -108,9 +108,7 @@ function Editor({ initial }: { initial: Initial }) {
   return (
     <div className="flex min-h-full flex-col lg:h-[100dvh] lg:overflow-hidden">
       <header className="flex items-center gap-3 border-b border-rule bg-panel px-4 py-2">
-        <Link href="/" className="font-display text-[15px] font-medium">
-          Kaos Ulang Tahun
-        </Link>
+        <Brand />
         <span className="text-rule">/</span>
         {/* Same rule the homepage row uses, so a named set reads the same in both places. */}
         <span className="truncate font-display text-[15px]">{setTitle(state.input).title || "Set baru"}</span>
@@ -120,10 +118,10 @@ function Editor({ initial }: { initial: Initial }) {
         <div className="ml-auto flex items-center gap-3">
           <div className="flex items-center gap-0.5">
             <Button variant="quiet" data-testid="undo" disabled={!canUndo} onClick={undo} title="Batalkan (⌘Z)" aria-label="Batalkan">
-              ↩
+              <HistoryIcon />
             </Button>
             <Button variant="quiet" data-testid="redo" disabled={!canRedo} onClick={redo} title="Ulangi (⇧⌘Z)" aria-label="Ulangi">
-              ↪
+              <HistoryIcon redo />
             </Button>
           </div>
           {warning && (
@@ -208,6 +206,16 @@ function Editor({ initial }: { initial: Initial }) {
         </aside>
       </div>
     </div>
+  );
+}
+
+/** A curved arrow for undo; mirrored for redo so the pair reads as one control. */
+function HistoryIcon({ redo = false }: { redo?: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden className={`size-4 ${redo ? "-scale-x-100" : ""}`} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7.5 5 3.5 9l4 4" />
+      <path d="M3.5 9h8a5 5 0 0 1 0 10H9" />
+    </svg>
   );
 }
 

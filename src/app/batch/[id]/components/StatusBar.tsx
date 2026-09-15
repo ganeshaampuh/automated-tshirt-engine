@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Brand } from "@/app/components/Brand";
 import { Button, ConfirmButton } from "@/app/components/ui";
 import { deleteWarning, progressFraction, progressLine, isBusy, resumeOffered, type GalleryCounts } from "../galleryRules";
 
@@ -40,9 +40,8 @@ export function StatusBar({
   return (
     <header className="sticky top-0 z-20 border-b border-rule bg-panel">
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-3 pb-2">
-        <Link href="/" className="font-display text-[13px] text-muted transition-colors hover:text-ink">
-          ← Kembali
-        </Link>
+        <Brand />
+        <span className="text-rule">/</span>
         <h1 className="truncate font-display text-[17px] font-medium">{name}</h1>
         <p data-testid="progress-line" className="text-[13px] text-muted">
           {progressLine(counts)}

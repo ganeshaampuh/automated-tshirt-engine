@@ -87,7 +87,7 @@ export function GalleryActions({
             href={zipUrl}
             download
             data-testid="download-zip"
-            className="inline-flex items-center rounded-md border border-rule px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-panel"
+            className="inline-flex items-center rounded-[var(--radius-ctl)] border border-rule bg-panel px-2.5 py-1.5 font-display text-[13px] leading-none transition-colors hover:bg-bench"
           >
             Unduh ZIP
           </a>

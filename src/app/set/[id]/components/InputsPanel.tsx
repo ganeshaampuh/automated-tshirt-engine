@@ -111,8 +111,9 @@ export function InputsPanel({
               }`}
             />
           ))}
+          {/* Its own row: beside the swatches it wrapped onto a line of its own anyway, but ragged. */}
           <input
-            className="field ml-1 w-[84px] font-mono text-[12px] uppercase"
+            className="field mt-1.5 basis-full font-mono text-[12px] uppercase"
             value={input.shirtColor}
             aria-label="Kode warna"
             onChange={e => {

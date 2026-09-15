@@ -52,7 +52,7 @@ function Panel() {
   const ready = report !== null && report.errors.length === 0 && report.rows > 0;
 
   return (
-    <div className="border border-rule bg-panel">
+    <div className="overflow-hidden rounded-[var(--radius-ctl)] border border-rule bg-panel">
       <div className="flex flex-wrap items-center gap-3 border-b border-rule px-4 py-4">
         <input
           ref={inputRef}
@@ -88,7 +88,7 @@ function Panel() {
             {report.rows} set, {report.members} kaos
           </p>
           {report.errors.length === 0 ? (
-            <p className="mt-1 text-[13px] text-muted">Tidak ada masalah. Silakan buat batch.</p>
+            <p className="mt-1 text-[13px] text-mat">Tidak ada masalah. Silakan buat batch.</p>
           ) : (
             <>
               <p className="mt-1 text-[13px] text-alert">

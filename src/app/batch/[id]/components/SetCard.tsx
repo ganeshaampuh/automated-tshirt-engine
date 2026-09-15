@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { StatusChip } from "@/app/components/StatusChip";
 import { Button, ConfirmButton } from "@/app/components/ui";
 import { setTitle } from "@/lib/setTitle";
 import type { MemberStates } from "@/lib/memberState";
@@ -54,7 +55,7 @@ export function SetCard({
   const busy = row.status === "queued" || row.status === "processing";
 
   return (
-    <article data-testid="set-card" data-status={row.status} className="relative border border-rule bg-panel">
+    <article data-testid="set-card" data-status={row.status} className="relative overflow-hidden rounded-[var(--radius-ctl)] border border-rule bg-panel">
       <span aria-hidden className={`absolute inset-y-0 left-0 w-[3px] ${EDGE[row.status] ?? "bg-transparent"}`} />
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-rule py-2.5 pr-3 pl-4">
@@ -72,13 +73,8 @@ export function SetCard({
           {title} <span className="text-muted">{subtitle && `· ${subtitle} `}· {age} th</span>
         </h2>
         <p className="truncate text-[13px] text-muted">{theme}</p>
-        <span
-          data-testid="set-status"
-          className={`ml-auto font-display text-[12px] ${
-            row.status === "failed" ? "text-alert" : row.status === "approved" ? "text-mat" : "text-muted"
-          }`}
-        >
-          {LABEL[row.status] ?? row.status}
+        <span className="ml-auto">
+          <StatusChip testId="set-status" status={row.status} label={LABEL[row.status] ?? row.status} />
         </span>
       </div>
 
